@@ -1,0 +1,12 @@
+{
+    "account_info": {
+        "login" : 600011860,
+        "password" : "!1T9219g",
+        "server" : "Opogroup-Server1",
+        "commision": 4,
+        "spread": 0
+    },
+    "risk_management":{
+        "R" : 0.1
+    }
+}
