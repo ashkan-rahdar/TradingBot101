@@ -1,0 +1,3 @@
+- [ ] validate FTC and EL in //flag class
+- [ ] realtime updating data and Flags
+- [ ] validate flags in //Flag manager
