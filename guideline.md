@@ -7,7 +7,7 @@
 - [ ] merging flags
 
 **config**
-- [*] chosen timeframes
+- [x] chosen timeframes
 # Add
 **Add to project**:
 - [ ] Position_Manager
