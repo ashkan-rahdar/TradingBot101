@@ -54,9 +54,9 @@ def Figure_Flag(dataset: pd.DataFrame, FLAGS: pd.DataFrame):
     fig.add_trace(go.Scatter(x=Time_DPs_figure['EL_Lows'], y=Important_DPs_figure['EL_Lows'], mode='markers', name='Low of EL'))
     fig.add_trace(go.Scatter(x=Time_DPs_figure['EL_High'], y=Important_DPs_figure['EL_High'], mode='markers', name='High of EL'))
     # Add the third line (e.g., 'High' prices)
-    fig.add_trace(go.Scatter(x=dataset['time'], y=dataset['high'], mode='lines', name='High Prices'))
+    fig.add_trace(go.Scatter(x=indexes, y=dataset['high'], mode='lines', name='High Prices'))
     # Add the second line (e.g., 'Low' prices)
-    fig.add_trace(go.Scatter(x=dataset['time'], y=dataset['low'], mode='lines', name='Low Prices'))
+    fig.add_trace(go.Scatter(x=indexes, y=dataset['low'], mode='lines', name='Low Prices'))
 
     # Customize layout if needed
     fig.update_layout(title="Highs and Lows on Close price",
