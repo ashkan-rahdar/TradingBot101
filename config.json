@@ -6,7 +6,12 @@
         "commision": 4,
         "spread": 0
     },
-    "risk_management":{
-        "R" : 0.1
+    "trading_configs":{
+        "timeframes": ["M5", "M15", "H1"],
+        
+        "risk_management":{
+        "R" : 0.1,
+        "max_wieght": 4
+        }
     }
 }
