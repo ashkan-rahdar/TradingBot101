@@ -10,14 +10,14 @@
 - [x] chosen timeframes
 
 **general**:
-- [ ] make any requst try and catch.
-- [ ] use async and await for handeling requests. 
+- [x] make any requst try and catch.
+- [x] use async and await for handeling requests. 
 - [ ] adding MD in project for documentation of project.
-- [ ] immigiration from .ipynb to .py
+- [x] immigiration from .ipynb to .py
 
 # Add
 **Position_Manager**:
-- [ ] open validate DPs positions
+- [ ] open valid DPs positions
   - [ ] set accurate vol
 - [ ] Merging timeframes
 - [ ] cancel invalid flag's and Dp's positions
