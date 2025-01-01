@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 import sys
 import os
+from colorama import Fore, Style
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -30,6 +31,7 @@ async def fetch_data():
     try:
         DataSet = pd.DataFrame(mt.copy_rates_from('EURUSD', mt.TIMEFRAME_M15, datetime.now(), 10000))
         DataSet['time'] = pd.to_datetime(DataSet["time"], unit='s')
+        print(Fore.GREEN + Style.BRIGHT + "||||||||||||||||||| Data successfully fetched |||||||||||||||||||" + Style.RESET_ALL)
         return DataSet
     except Exception as e:
         logger.error(f"Failed to fetch data: {e}")
