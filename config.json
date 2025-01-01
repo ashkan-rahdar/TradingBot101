@@ -13,5 +13,12 @@
         "R" : 0.1,
         "max_wieght": 4
         }
+    },
+    "runtime":{
+        "emergency_mode":{
+            "status": true,
+            "password": "ashkan"
+        },
+        "refresh_time": 30
     }
 }
