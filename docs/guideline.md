@@ -10,6 +10,7 @@
 - [x] chosen timeframes
 
 **general**:
+- [x] realtime fetching data and detection
 - [x] make any requst try and catch.
 - [x] use async and await for handeling requests. 
 - [ ] adding MD in project for documentation of project.
