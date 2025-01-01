@@ -37,6 +37,11 @@ error_handler.setLevel(logging.ERROR)
 error_handler.setFormatter(log_formatter)
 error_handler.addFilter(LogLevelFilter(logging.ERROR))
 
+critical_handler = RotatingFileHandler("logs/critical.log", maxBytes=5 * 1024 * 1024, backupCount=3)
+critical_handler.setLevel(logging.CRITICAL)
+critical_handler.setFormatter(log_formatter)
+critical_handler.addFilter(LogLevelFilter(logging.CRITICAL))
+
 # Create the main logger
 logger = logging.getLogger("MyLogger")
 logger.setLevel(logging.DEBUG)
@@ -45,3 +50,4 @@ logger.setLevel(logging.DEBUG)
 logger.addHandler(info_handler)
 logger.addHandler(warning_handler)
 logger.addHandler(error_handler)
+logger.addHandler(critical_handler)
