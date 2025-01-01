@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+from colorama import Fore, Style
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -11,30 +12,30 @@ from classes.FlagPoint import FlagPoint
 
 class FlagDetector:
     """Detects Bullish and Bearish flags from a dataset."""
-    def __init__(self, dataset: pd.DataFrame):
-        self.dataset = dataset
+    def __init__(self):
         self.flags = {} 
 
-    def detect_local_extremes(self):
+    def detect_local_extremes(self, dataset: pd.DataFrame):
         """Precompute local maxima and minima for the dataset."""
-        highs = self.dataset['high']
-        lows = self.dataset['low']
+        highs = dataset['high']
+        lows = dataset['low']
 
         # Using NumPy for vectorized operations
         is_local_max = (highs > np.roll(highs, 1)) & (highs > np.roll(highs, -1))
         is_local_min = (lows < np.roll(lows, 1)) & (lows < np.roll(lows, -1))
 
         # Assign results back to the dataset
-        self.dataset['is_local_max'] = is_local_max
-        self.dataset['is_local_min'] = is_local_min
+        dataset['is_local_max'] = is_local_max
+        dataset['is_local_min'] = is_local_min
 
-    async def detect_bullish_flags(self):
+    async def detect_bullish_flags(self, dataset: pd.DataFrame):
         """Detect Bullish Flags."""
         logger.info("Detecting Bullish Flags...")
-        highs = self.dataset['high']
-        lows = self.dataset['low']
+        print(Fore.BLUE + Style.DIM +"Detecting Bullish Flags..." + Style.RESET_ALL)
+        highs = dataset['high']
+        lows = dataset['low']
 
-        local_max_indices = np.where(self.dataset['is_local_max'].to_numpy())[0]
+        local_max_indices = np.where(dataset['is_local_max'].to_numpy())[0]
         for i in local_max_indices:
             high_of_flag = highs[i]
 
@@ -88,24 +89,25 @@ class FlagDetector:
                     start_index_EL = i + 1 + start_indices_EL[0]
             # Append valid flag
             flag = Flag(
-                flag_id= self.dataset['time'][i],
+                flag_id= dataset['time'][i],
                 flag_type=("Bullish" if low_of_flag_index != i else "Undefined"),
                 high=FlagPoint(price= high_of_flag,index= i),
                 low=FlagPoint(price= low_of_flag, index= low_of_flag_index),
-                data_in_flag= self.dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
+                data_in_flag= dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
                 start_index= start_of_flag_index,
                 end_index= end_of_flag_index,
                 start_FTC= end_of_flag_index,
                 start_EL= start_index_EL
             )
             await self.add_flag(flag)
-    async def detect_bearish_flags(self):
+    async def detect_bearish_flags(self, dataset: pd.DataFrame):
         """Detect Bearish Flags."""
         logger.info("Detecting Bearish Flags...")
-        highs = self.dataset['high']
-        lows = self.dataset['low']
+        print(Fore.BLUE + Style.DIM +"Detecting Bearish Flags..." + Style.RESET_ALL)
+        highs = dataset['high']
+        lows = dataset['low']
 
-        local_min_indices = np.where(self.dataset['is_local_min'].to_numpy())[0]
+        local_min_indices = np.where(dataset['is_local_min'].to_numpy())[0]
         for i in local_min_indices:
             low_of_flag = lows[i]
 
@@ -160,11 +162,11 @@ class FlagDetector:
 
             # Append valid flag
             flag = Flag(
-                flag_id= self.dataset['time'][i],
+                flag_id= dataset['time'][i],
                 flag_type= ("Bearish" if high_of_flag_index != i else "Undefined"),
                 high=FlagPoint(price= high_of_flag, index= high_of_flag_index),
                 low=FlagPoint(price= low_of_flag, index= i),
-                data_in_flag= self.dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
+                data_in_flag= dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
                 start_index= start_of_flag_index,
                 end_index= end_of_flag_index,
                 start_FTC= end_of_flag_index,
@@ -172,13 +174,14 @@ class FlagDetector:
             )
             await self.add_flag(flag)
             
-    async def run_detection(self):
+    async def run_detection(self, dataset: pd.DataFrame):
         """Run flag detection for both Bullish and Bearish flags."""
         try:
-            self.detect_local_extremes()  # Precompute local extremes
-            await self.detect_bullish_flags()
-            await self.detect_bearish_flags()
+            self.detect_local_extremes(dataset)  # Precompute local extremes
+            await self.detect_bullish_flags(dataset)
+            await self.detect_bearish_flags(dataset)
             logger.info("|||||||||||||| Detection complete ||||||||||||||||||")
+            print(Fore.GREEN + Style.BRIGHT + "|||||||||||||| Detection complete ||||||||||||||||||" + Style.RESET_ALL)
         except Exception as e:
             logger.error(f"An error occurred during detection: {e}")
             raise
@@ -204,3 +207,8 @@ class FlagDetector:
         else:
             logger.warning(f"Flag {flag_id} not found.")
             return None
+        
+
+
+# # Merge new_FLAGS with FLAGS
+#     FLAGS = pd.concat([FLAGS, new_FLAGS]).drop_duplicates().reset_index(drop=True)
