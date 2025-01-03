@@ -10,11 +10,19 @@
         "timeframes": ["M5", "M15", "H1"],
         
         "risk_management":{
-        "R" : 0.1,
-        "max_wieght": 4
+            "R" : 0.1,
+            "max_wieght": 4
         }
     },
     "runtime":{
+        "development": {
+            "status": true,
+            "visualazation":{
+                "status_flags": false,
+                "status_FTC_reaction": true,
+                "status_EL_reaction": true
+            }
+        },
         "emergency_mode":{
             "status": true,
             "password": "ashkan"

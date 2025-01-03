@@ -11,6 +11,7 @@ from functions.logger import logger
 from functions.Figure_Flag import Figure_Flag
 from functions.Reaction_detector import main_reaction_detector
 from functions.run_with_retries import run_with_retries
+from functions.save_to_excel import save_to_excel_realtime
 
 # Load JSON config file
 with open("./config.json", "r") as file:
@@ -34,7 +35,7 @@ async def emergency_listener():
             else:
                 print(Fore.YELLOW + "emergency_mode in config is false" + Style.RESET_ALL)
 
-        elif user_input.strip() != "ashkan":
+        elif user_input.strip() != emergency_keyword:
             print(Fore.YELLOW + f"Not valid syntax. If you want trigger emergency mode type:{emergency_keyword} and if want to stop code use Ctrl+C" + Style.RESET_ALL)
 
 def emergency_handler(sig, frame):
@@ -44,20 +45,24 @@ def emergency_handler(sig, frame):
 async def main():
     global emergency_flag
     detector = FlagDetector()
+    # total_dataset =  pd.DataFrame()
 
     while not emergency_flag:
         try:
             # Step 1: Fetch Data
             try:
                 print(Fore.BLUE + Style.DIM + "Fetching Data..." +  Style.RESET_ALL)
-                DataSet, account_info = await run_with_retries(main_fetching_data)
+                DataSet, account_info = await run_with_retries(main_fetching_data, config["trading_configs"]["timeframes"][0])
             except RuntimeError as e:
                 logger.critical(f"Critical failure in fetching data: {e}")
+                print(Fore.RED + Style.BRIGHT + f"Critical failure in fetching data: {e}" +  Style.RESET_ALL)
                 emergency_flag = True
                 emergency_event.set()
+                DataSet = pd.DataFrame()
                 break
 
-            print(Fore.BLACK + Style.DIM + f"Data: \n{DataSet}" + Style.RESET_ALL)
+            print(Fore.BLACK + Style.DIM + f"Fetched Data: \n{DataSet}" + Style.RESET_ALL)
+            # total_dataset = pd.concat([total_dataset, DataSet]).drop_duplicates().reset_index(drop=True)
 
             # Step 2: Detect Flags
             try:
@@ -68,18 +73,22 @@ async def main():
                 logger.warning(f"Flag detection failed: {e}")
                 FLAGS = pd.DataFrame()
 
-            # Step 3: Visualize Flags
-            try:
-                Figure_Flag(DataSet, FLAGS)
-            except Exception as e:
-                logger.error(f"Visualization failed: {e}")
+            # step 2.1: save to excel
+            save_to_excel_realtime(FLAGS, "FLAGS.xlsx")
+            if config["runtime"]["development"]["status"]:
+                # Step 3: Visualize Flags
+                try:
+                    if config["runtime"]["develpoment"]["visualazation"]["status_flags"]:
+                        Figure_Flag(DataSet, FLAGS)
+                except Exception as e:
+                    logger.error(f"Visualization failed: {e}")
 
-            # Step 4: React to Flags
-            try:
-                await run_with_retries(main_reaction_detector, FLAGS, DataSet, account_info.balance)
-            except RuntimeError as e:
-                logger.warning(f"Reaction detection failed: {e}")
-                # Emergency fallback action, e.g., reset trades
+                # Step 4: React to Flags
+                try:
+                    await run_with_retries(main_reaction_detector, FLAGS, DataSet, account_info.balance)
+                except RuntimeError as e:
+                    logger.warning(f"Reaction detection failed: {e}")
+                    # Emergency fallback action, e.g., reset trades
 
         except Exception as e:
             logger.critical(f"Unhandled error in main loop: {e}")
@@ -94,7 +103,7 @@ async def main():
 
     if emergency_flag:
         # Perform emergency actions here
-        print("an example of emergency actions is this print")
+        print(Fore.MAGENTA + "an example of emergency actions is this print" + Style.RESET_ALL)
         logger.critical("Performing emergency actions...")
 
 if __name__ == "__main__":
