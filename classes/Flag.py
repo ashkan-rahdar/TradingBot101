@@ -1,5 +1,6 @@
 import typing
 import pandas as pd
+import numpy as np
 import json
 import sys
 import os
@@ -8,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classes.FlagPoint import FlagPoint
 from classes.Important_DPs import Important_DPs
-
+from functions.logger import logger
 
 
 # Load JSON config file
@@ -28,7 +29,7 @@ class Flag:
                  start_EL: int):
         
         self.flag_id = flag_id
-        self.flag_type = flag_type
+        self.flag_type: typing.Literal["Bullish", "Bearish","Undefined"] = flag_type
         self.high = high
         self.low = low
         self.duration = end_index - (low.index if flag_type == "Bearish" else high.index)
@@ -62,6 +63,15 @@ class Flag:
         self.EL.DP.start_index = start_EL
         self.weight = self.weight_of_flag()
 
+        self.validate_DP(
+            Important_DP=self.FTC,
+            dataset= (data_in_flag.iloc[low.index - start_index + 1:] if flag_type=="Bullish" 
+                      else data_in_flag.iloc[high.index - start_index + 1:]))
+        self.validate_DP(
+            Important_DP=self.EL,
+            dataset= (data_in_flag.iloc[low.index - start_index + 1:] if flag_type=="Bullish" 
+                      else data_in_flag.iloc[high.index - start_index + 1:]))
+        
     def weight_of_flag(self):
         weights = []
         
@@ -72,6 +82,40 @@ class Flag:
         else: weights.append(max_weight)
         
         return sum(weights)
+    
+    def validate_DP(self, Important_DP: Important_DPs, dataset: pd.DataFrame):
+        highs = dataset['high'].to_numpy()
+        lows = dataset['low'].to_numpy()
+        local_Lows_index = np.where(dataset['is_local_min'].to_numpy())[0]
+        local_Highs_index = np.where(dataset['is_local_max'].to_numpy())[0]
+
+        if Important_DP.DP.Status != "Active":
+            return
+
+        if self.flag_type == "Bearish":
+            if local_Highs_index.size == 0:
+                return
+
+            local_Highs = highs[local_Highs_index]
+            for high in local_Highs:
+                if high > Important_DP.DP.High.price:
+                    index_high = np.where(highs == high)[0][-1]
+                    if lows[:index_high].min() <= Important_DP.DP.High.price:
+                        Important_DP.DP.Status = "Used"
+                        break
+
+        elif self.flag_type == "Bullish":
+            if local_Lows_index.size == 0:
+                return
+
+            local_Lows = lows[local_Lows_index]
+            for low in local_Lows:
+                if low < Important_DP.DP.Low.price:
+                    index_low = np.where(lows == low)[0][-1]
+                    if highs[:index_low].max() >= Important_DP.DP.Low.price:
+                        Important_DP.DP.Status = "Used"
+                        break
+    
     def __repr__(self):
         return (f"Flag is like ID: {self.flag_id}, Type: {self.flag_type}, High: {self.high}, Low: {self.low}, "
                 f"Start index: {self.Start_index}, End index: {self.End_index}, EL: {self.EL}, "
