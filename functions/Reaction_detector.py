@@ -18,7 +18,7 @@ async def Reaction_to_DP(DP: DP_Parameteres,
                    direction: typing.Literal["Bullish", "Bearish","Undefined"],
                    start: int):
     reaction = None
-    if direction == "Bullish" and DP.High.price is not None and DP.Low.price is not None and start is not None:
+    if direction == "Bullish" and DP.High.price is not None and DP.Low.price is not None and start is not None and DP.Status == "Active":
         # Find the initial index where 'low' crosses below DP.High.price
         initial_indexes = dataset.index[dataset["low"] <= DP.High.price]
         if initial_indexes.empty:
@@ -37,7 +37,7 @@ async def Reaction_to_DP(DP: DP_Parameteres,
 
         reaction *= DP.weight
         
-    elif direction == "Bearish" and DP.High.price is not None and DP.Low.price is not None and start is not None: 
+    elif direction == "Bearish" and DP.High.price is not None and DP.Low.price is not None and start is not None and DP.Status == "Active": 
         # Find the initial index where 'high' crosses higher DP.Low.price
         initial_indexes = dataset.index[dataset["high"] >= DP.Low.price]
         if initial_indexes.empty:
