@@ -17,12 +17,12 @@ async def Reaction_to_DP(DP: DP_Parameteres,
                    dataset: pd.DataFrame, 
                    direction: typing.Literal["Bullish", "Bearish","Undefined"],
                    start: int):
-    reaction = None
+    reaction = -2
     if direction == "Bullish" and DP.High.price is not None and DP.Low.price is not None and start is not None and DP.Status == "Active":
         # Find the initial index where 'low' crosses below DP.High.price
         initial_indexes = dataset.index[dataset["low"] <= DP.High.price]
         if initial_indexes.empty:
-            return None
+            return -2
         
         initial_index = initial_indexes[0]
 
@@ -41,7 +41,7 @@ async def Reaction_to_DP(DP: DP_Parameteres,
         # Find the initial index where 'high' crosses higher DP.Low.price
         initial_indexes = dataset.index[dataset["high"] >= DP.Low.price]
         if initial_indexes.empty:
-            return None
+            return -2
         
         initial_index = initial_indexes[0]
 
@@ -55,19 +55,29 @@ async def Reaction_to_DP(DP: DP_Parameteres,
         DP.Status = "Used"
 
         reaction *= DP.weight
-    return reaction
+    if reaction != None:
+        return reaction
+    else:
+        return -2
 
-async def Reaction_detector(flags: pd.DataFrame, dataset: pd.DataFrame):
+async def Reaction_detector(flags: pd.DataFrame, 
+                            dataset: pd.DataFrame):
     Reaction_to_FTC = []
     Reaction_to_EL = []
-    for flag in flags['Flag informations']:
-        Reaction_to_EL.append(await Reaction_to_DP(flag.EL.DP, dataset.iloc[flag.EL.DP.start_index:], flag.flag_type, flag.EL.DP.start_index))
-        Reaction_to_FTC.append(await Reaction_to_DP(flag.FTC.DP, dataset.iloc[flag.FTC.DP.start_index:], flag.flag_type, flag.FTC.DP.start_index)) 
+    for _,flag in flags.iterrows():
+        Reaction_to_EL.append(await Reaction_to_DP(flag.EL.DP, dataset.iloc[flag.EL.DP.start_index:], flag.Type, flag.EL.DP.start_index))
+        Reaction_to_FTC.append(await Reaction_to_DP(flag.FTC.DP, dataset.iloc[flag.FTC.DP.start_index:], flag.Type, flag.FTC.DP.start_index)) 
     
     flags["Reaction to FTC"] = Reaction_to_FTC
     flags["Reaction to EL"] = Reaction_to_EL
 
-async def backtest_FLAGS(FLAGS, column_name, RR_values, commision, R, account_balance):
+async def backtest_FLAGS(FLAGS: pd.DataFrame,
+                        column_name: str, 
+                        RR_values, 
+                        commision: int,
+                        R: int, 
+                        account_balance: int, 
+                        timeframe_name: str):
     RESULT = []
     Winrates = []
 
@@ -80,11 +90,11 @@ async def backtest_FLAGS(FLAGS, column_name, RR_values, commision, R, account_ba
         # Iterate through reactions
         for value in FLAGS[column_name]:
             flag_index += 1
-            if pd.isna(value):  # Skip NaN values
+            if value == -2:  # Skip NaN values
                 continue
 
             trades += 1
-            weight = FLAGS['Flag informations'][flag_index].weight
+            weight = FLAGS['Weight'][flag_index]
             if value <= RR:
                 Total_SLs += 1
                 result -= R*weight
@@ -123,7 +133,7 @@ async def backtest_FLAGS(FLAGS, column_name, RR_values, commision, R, account_ba
     fig.add_trace(go.Scatter(x=RR_values, y=np.array(Winrates), mode='lines', name="Winrate"))
     #fig.add_trace(go.Scatter(x=RR_values, y=np.array(RESULT_bullish), mode='lines', name=column_name+ "bullish"))
     #fig.add_trace(go.Scatter(x=RR_values, y=np.array(RESULT_bearish), mode='lines', name=column_name+ "bearish"))
-    fig.update_layout(title=column_name,
+    fig.update_layout(title=column_name + " " +  timeframe_name,
                     xaxis_title="RR",
                     yaxis_title="Percentage")
     fig.show()
@@ -136,7 +146,7 @@ async def backtest_FLAGS(FLAGS, column_name, RR_values, commision, R, account_ba
     return np.array(RESULT), np.array(Winrates)
     
 
-async def main_reaction_detector(FLAGS: pd.DataFrame, DataSet: pd.DataFrame, account_balance: int):
+async def main_reaction_detector(FLAGS: pd.DataFrame, DataSet: pd.DataFrame, account_balance: int, name):
     await Reaction_detector(FLAGS,DataSet)
 
     # Constants
@@ -145,5 +155,7 @@ async def main_reaction_detector(FLAGS: pd.DataFrame, DataSet: pd.DataFrame, acc
     RR_values = np.arange(0.1, 10, 0.01)
 
     # Calculate metrics
-    Profits_EL, Winrates_EL = await backtest_FLAGS(FLAGS, 'Reaction to EL', RR_values, commision, R, account_balance)
-    Profits_FTC, Winrates_FTC = await backtest_FLAGS(FLAGS, 'Reaction to FTC', RR_values, commision, R, account_balance)
+    if config["runtime"]["development"]["visualazation"]["status_FTC_reaction"]:
+        Profits_FTC, Winrates_FTC = await backtest_FLAGS(FLAGS, 'Reaction to FTC', RR_values, commision, R, account_balance, name)
+    if config["runtime"]["development"]["visualazation"]["status_EL_reaction"]:
+        Profits_EL, Winrates_EL = await backtest_FLAGS(FLAGS, 'Reaction to EL', RR_values, commision, R, account_balance, name)

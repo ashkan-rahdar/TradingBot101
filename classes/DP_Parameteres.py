@@ -7,6 +7,6 @@ from .FlagPoint import FlagPoint
 class DP_Parameteres:  
     High: FlagPoint 
     Low: FlagPoint
-    Status: typing.Literal["Used", "Active", "Not Valid"] = "Active"
+    type: typing.Literal["FTC", "EL", "MPL"] = "FTC"
     weight: int = 0
     start_index : int = -1

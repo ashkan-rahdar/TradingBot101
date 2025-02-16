@@ -1,17 +1,18 @@
+import mysql.connector
 import asyncio
 import pandas as pd
 import signal
 import sys
+import os
 import json
 from colorama import Fore,Style
 
-from functions.fetching_data import main_fetching_data
-from classes.Flag_Detector import FlagDetector
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from functions.logger import logger
-from functions.Figure_Flag import Figure_Flag
-from functions.Reaction_detector import main_reaction_detector
 from functions.run_with_retries import run_with_retries
-from functions.save_to_excel import save_to_excel_realtime
+from classes.timeframe import CTimeFrames
+from classes.Metatrader_Module import CMetatrader_Module
 
 # Load JSON config file
 with open("./config.json", "r") as file:
@@ -44,51 +45,47 @@ def emergency_handler(sig, frame):
 
 async def main():
     global emergency_flag
-    detector = FlagDetector()
-    # total_dataset =  pd.DataFrame()
 
     while not emergency_flag:
         try:
-            # Step 1: Fetch Data
-            try:
-                print(Fore.BLUE + Style.DIM + "Fetching Data..." +  Style.RESET_ALL)
-                DataSet, account_info = await run_with_retries(main_fetching_data, config["trading_configs"]["timeframes"][0])
-            except RuntimeError as e:
-                logger.critical(f"Critical failure in fetching data: {e}")
-                print(Fore.RED + Style.BRIGHT + f"Critical failure in fetching data: {e}" +  Style.RESET_ALL)
-                emergency_flag = True
-                emergency_event.set()
-                DataSet = pd.DataFrame()
-                break
-
-            print(Fore.BLACK + Style.DIM + f"Fetched Data: \n{DataSet}" + Style.RESET_ALL)
-            # total_dataset = pd.concat([total_dataset, DataSet]).drop_duplicates().reset_index(drop=True)
-
-            # Step 2: Detect Flags
-            try:
-                await run_with_retries(detector.run_detection,DataSet)
-                FLAGS = pd.DataFrame(detector.flags.items(), columns=["Flag Id", "Flag informations"])
-                print(Fore.BLACK + Style.DIM + f"Flags: \n {FLAGS}" + Style.RESET_ALL)
-            except RuntimeError as e:
-                logger.warning(f"Flag detection failed: {e}")
-                FLAGS = pd.DataFrame()
-
-            # step 2.1: save to excel
-            save_to_excel_realtime(FLAGS, "FLAGS.xlsx")
-            if config["runtime"]["development"]["status"]:
-                # Step 3: Visualize Flags
+            # Step 1: Updating Data, Flags, and excels of each timeframes
+            for index, atimeframe in enumerate(config["trading_configs"]["timeframes"]):
+                # Step 1.1: Fetch Data
                 try:
-                    if config["runtime"]["develpoment"]["visualazation"]["status_flags"]:
-                        Figure_Flag(DataSet, FLAGS)
-                except Exception as e:
-                    logger.error(f"Visualization failed: {e}")
-
-                # Step 4: React to Flags
-                try:
-                    await run_with_retries(main_reaction_detector, FLAGS, DataSet, account_info.balance)
+                    aDataSet = await run_with_retries(CMetatrader_Module.main_fetching_data,atimeframe)
                 except RuntimeError as e:
-                    logger.warning(f"Reaction detection failed: {e}")
-                    # Emergency fallback action, e.g., reset trades
+                    logger.critical(f"Critical failure in fetching {atimeframe} data: {e}")
+                    print(Fore.RED + Style.BRIGHT + f"Critical failure in fetching {atimeframe} data: {e}" +  Style.RESET_ALL)
+                    emergency_flag = True
+                    emergency_event.set()
+                    aDataSet = pd.DataFrame()
+                    break
+
+                CTimeFrames[index].set_data(aDataSet)
+
+                # Step 1.2: Detect Flags
+                await run_with_retries(CTimeFrames[index].detect_flags)
+
+                # step 1.2.1: save to excel
+                # await run_with_retries(CTimeFrames[index].save_to_excel)
+                # await run_with_retries(CTimeFrames[index].save_to_DB)
+
+                # step 1.3: Development
+                # await run_with_retries(CTimeFrames[index].development, CMetatrader_Module.mt.account_info())
+                
+                try:
+                    await asyncio.wait_for(emergency_event.wait(), timeout=config["runtime"]["time_between_timeframes"])
+                except asyncio.TimeoutError:
+                    pass
+                if emergency_flag:
+                    break
+
+            #Step 2: update positions
+            try:
+                await run_with_retries(CMetatrader_Module.Update_Flags)
+            except RuntimeError as e:
+                logger.critical(f"Critical failure in updating Positions: {e}")
+                print(Fore.RED + Style.BRIGHT + f"Critical failure in updating Positions: {e}" +  Style.RESET_ALL)
 
         except Exception as e:
             logger.critical(f"Unhandled error in main loop: {e}")
@@ -97,7 +94,7 @@ async def main():
 
         # Wait for 5 minutes or until emergency_event is set
         try:
-            await asyncio.wait_for(emergency_event.wait(), timeout=config["runtime"]["refresh_time"])
+            await asyncio.wait_for(emergency_event.wait(), timeout=config["runtime"]["refresh_Data_time"])
         except asyncio.TimeoutError:
             pass
 

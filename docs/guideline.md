@@ -1,9 +1,9 @@
 # Edit
 **Flag class**:
-- [ ] validate FTC and EL <span style="color:lightcoral">we should think about a strategy for it</span>
+- [ ] validate FTC and EL <span style="color:lightseagreen">Using MPL reaction (except FTC)</span> </br> <span style="color:lightseagreen">Not trading merged FTC and EL</span>
 
 **Flag_Manager**:
-- [ ] validate flags <span style="color:lightcoral">we should think about a strategy for it</span>
+- [ ] validate flags <span style="color:lightseagreen">Using MPL reaction (except FTC)</span> </br> <span style="color:lightseagreen">Not trading merged FTC and EL</span>
 - [ ] merging flags <span style="color:lightcoral">we should think about a strategy for it</span>
 
 **config**

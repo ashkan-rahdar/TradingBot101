@@ -2,6 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 import sys
+import traceback
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -18,6 +19,13 @@ class LogLevelFilter(logging.Filter):
     def filter(self, record):
         return record.levelno == self.level
 
+# Custom error handler to log full traceback
+class FullTracebackHandler(RotatingFileHandler):
+    def emit(self, record):
+        if record.levelno >= logging.ERROR:  # Only for ERROR and CRITICAL logs
+            record.msg += f"\n{traceback.format_exc()}"  # Append traceback
+        super().emit(record)
+
 # Set up a formatter
 log_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
@@ -32,12 +40,13 @@ warning_handler.setLevel(logging.WARNING)
 warning_handler.setFormatter(log_formatter)
 warning_handler.addFilter(LogLevelFilter(logging.WARNING))
 
-error_handler = RotatingFileHandler("logs/error.log", maxBytes=5 * 1024 * 1024, backupCount=3)
+# Use FullTracebackHandler for error and critical logs
+error_handler = FullTracebackHandler("logs/error.log", maxBytes=5 * 1024 * 1024, backupCount=3)
 error_handler.setLevel(logging.ERROR)
 error_handler.setFormatter(log_formatter)
 error_handler.addFilter(LogLevelFilter(logging.ERROR))
 
-critical_handler = RotatingFileHandler("logs/critical.log", maxBytes=5 * 1024 * 1024, backupCount=3)
+critical_handler = FullTracebackHandler("logs/critical.log", maxBytes=5 * 1024 * 1024, backupCount=3)
 critical_handler.setLevel(logging.CRITICAL)
 critical_handler.setFormatter(log_formatter)
 critical_handler.addFilter(LogLevelFilter(logging.CRITICAL))

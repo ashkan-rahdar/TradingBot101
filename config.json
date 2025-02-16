@@ -7,7 +7,8 @@
         "spread": 0
     },
     "trading_configs":{
-        "timeframes": ["M5", "M15", "H1"],
+        "timeframes": ["M1"],
+        "asset": "EURUSD",
         
         "risk_management":{
             "R" : 0.1,
@@ -18,7 +19,7 @@
         "development": {
             "status": true,
             "visualazation":{
-                "status_flags": false,
+                "status_flags": true,
                 "status_FTC_reaction": true,
                 "status_EL_reaction": true
             }
@@ -27,6 +28,7 @@
             "status": true,
             "password": "ashkan"
         },
-        "refresh_time": 30
+        "refresh_Data_time": 300, 
+        "time_between_timeframes": 30
     }
 }
