@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from classes.Flag import Flag_Class
 from functions.logger import The_logger
 from classes.FlagPoint import FlagPoint_Class
-from classes.Important_DPs import Important_DPs_Class
+from classes.DP_Parameteres import DP_Parameteres_Class
 
 class Database_Class:
     def __init__(self, The_timeframe: str):
@@ -109,9 +109,9 @@ class Database_Class:
         return self.cursor.lastrowid  # Return the inserted row's ID
 
 
-    def _insert_important_dp_Function(self, The_Important_dp: Important_DPs_Class) -> int:
-        first_id = self._insert_flag_point_Function(The_Important_dp.DP.High)
-        second_id = self._insert_flag_point_Function(The_Important_dp.DP.Low)
+    def _insert_important_dp_Function(self, The_Important_dp: DP_Parameteres_Class) -> int:
+        first_id = self._insert_flag_point_Function(The_Important_dp.High)
+        second_id = self._insert_flag_point_Function(The_Important_dp.Low)
 
         if first_id is None or second_id is None:
             return None  # Skip insertion
@@ -119,7 +119,7 @@ class Database_Class:
         self.cursor.execute(
             f"""INSERT INTO {self.important_dps_table_name} (type, First_Point, Second_Point, weight)
             VALUES (%s, %s, %s, %s)""",
-            (The_Important_dp.DP.type , first_id, second_id, The_Important_dp.DP.weight)
+            (The_Important_dp.type , first_id, second_id, The_Important_dp.weight)
         )
         self.db.commit()
         return self.cursor.lastrowid
@@ -142,10 +142,10 @@ class Database_Class:
         result = self.cursor.fetchone()
         return FlagPoint_Class(price=result[0], time=result[1])
 
-    def _get_important_dp_Function(self, The_dp_id: int) -> Important_DPs_Class:
+    def _get_important_dp_Function(self, The_dp_id: int) -> DP_Parameteres_Class:
         if pd.isna(The_dp_id): return None
         self.cursor.execute(f"SELECT type, First_Point, Second_Point, weight FROM {self.important_dps_table_name} WHERE id = %s", (The_dp_id,))
         result = self.cursor.fetchone()
         first_point = self._get_flag_point_Function(result[1])
         second_point = self._get_flag_point_Function(result[2])
-        return Important_DPs_Class(type=result[0], first_point=first_point, second_point=second_point, weight=result[3])
+        return DP_Parameteres_Class(type=result[0], first_point=first_point, second_point=second_point, weight=result[3])
