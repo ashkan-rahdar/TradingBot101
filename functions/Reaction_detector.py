@@ -8,12 +8,12 @@ import plotly.graph_objects as go
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from classes.DP_Parameteres import DP_Parameteres
+from classes.DP_Parameteres import DP_Parameteres_Class
 
 with open("./config.json", "r") as file:
     config = json.load(file)
 
-async def Reaction_to_DP(DP: DP_Parameteres, 
+async def Reaction_to_DP(DP: DP_Parameteres_Class, 
                    dataset: pd.DataFrame, 
                    direction: typing.Literal["Bullish", "Bearish","Undefined"],
                    start: int):

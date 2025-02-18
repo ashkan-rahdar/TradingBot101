@@ -8,27 +8,27 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Now import the required modules
-from functions.logger import logger
-from classes.DP_Parameteres import DP_Parameteres
-from classes.FlagPoint import FlagPoint
+from functions.logger import The_logger
+from classes.DP_Parameteres import DP_Parameteres_Class
+from classes.FlagPoint import FlagPoint_Class
 
-class Important_DPs:
+class Important_DPs_Class:
     def __init__(self, 
                  dataset: pd.DataFrame, 
                  direction: typing.Literal["Bullish", "Bearish", "Undefined"], 
                  flag_id: pd.Series,
                  start_of_index: int):
 
-        logger.info(f"Detecting Important DPs of Flag {flag_id}")
+        The_logger.info(f"Detecting Important DPs of Flag {flag_id}")
         highs = dataset['high'].to_numpy()
         lows = dataset['low'].to_numpy()
         local_Lows_index = np.where(dataset['is_local_min'].to_numpy())[0]
         local_Highs_index = np.where(dataset['is_local_max'].to_numpy())[0]
         time = dataset['time']
 
-        self.DP = self.DP_Detector(lows, highs, time, direction, flag_id, local_Lows_index, local_Highs_index, start_of_index)
+        self.DP = self.DP_Detector_Function(lows, highs, time, direction, flag_id, local_Lows_index, local_Highs_index, start_of_index)
 
-    def DP_Detector(self, 
+    def DP_Detector_Function(self, 
                     lows: np.ndarray, 
                     highs: np.ndarray, 
                     time,
@@ -38,7 +38,7 @@ class Important_DPs:
                     local_Highs_index: np.ndarray,
                     start_of_index: int):
         
-        DP = DP_Parameteres(FlagPoint(None, None,None), FlagPoint(None, None,None))
+        DP = DP_Parameteres_Class(FlagPoint_Class(None, None,None), FlagPoint_Class(None, None,None))
         if flag_type == "Bullish":
             if len(local_Lows_index) == 0:
                 DP.weight = 0

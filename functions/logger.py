@@ -52,11 +52,11 @@ critical_handler.setFormatter(log_formatter)
 critical_handler.addFilter(LogLevelFilter(logging.CRITICAL))
 
 # Create the main logger
-logger = logging.getLogger("MyLogger")
-logger.setLevel(logging.DEBUG)
+The_logger = logging.getLogger("MyLogger")
+The_logger.setLevel(logging.DEBUG)
 
 # Add handlers to the logger
-logger.addHandler(info_handler)
-logger.addHandler(warning_handler)
-logger.addHandler(error_handler)
-logger.addHandler(critical_handler)
+The_logger.addHandler(info_handler)
+The_logger.addHandler(warning_handler)
+The_logger.addHandler(error_handler)
+The_logger.addHandler(critical_handler)

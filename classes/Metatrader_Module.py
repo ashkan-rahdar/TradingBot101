@@ -8,13 +8,13 @@ from colorama import Fore, Style
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from functions.logger import logger
+from functions.logger import The_logger
 
 # Load JSON config file
 with open("./config.json", "r") as file:
     config = json.load(file)
 
-class Metatrader_Module:
+class Metatrader_Module_Class:
     def __init__(self):
         self.Positions = pd.DataFrame()
         self.mt = MetaTrader5
@@ -32,13 +32,13 @@ class Metatrader_Module:
 
     
 
-    async def Update_Flags(self):
+    async def Update_Flags_Function(self):
         print(Fore.CYAN + Style.BRIGHT + f"you can see mt is transfered successfuly {self.mt}" + Style.RESET_ALL)
     ## for buying price = mt.symbol_info_tick(ticker).ask
     ## for selling price = mt.symbol_info_tick(ticker).bid
     ## order_type= mt.ORDER_TYPE_SELL / BUY
 
-    def Open_position(self, ticker, vol, order_type, price, sl, tp):
+    def Open_position_Function(self, ticker, vol, order_type, price, sl, tp):
         request = {
             "action": self.mt.TRADE_ACTION_DEAL,
             "symbol": ticker,
@@ -62,7 +62,7 @@ class Metatrader_Module:
 
 
     ## mt.position_get()[0]._asdict('ticket')
-    def Close_position(self ,ticker, vol, order_type, price, position):
+    def Close_position_Function(self ,ticker, vol, order_type, price, position):
         request = {
             "action": self.mt.TRADE_ACTION_DEAL,
             "symbol": ticker,
@@ -81,26 +81,23 @@ class Metatrader_Module:
     #result = Close_position("BTCUSD", 0.01,mt.ORDER_TYPE_BUY ,mt.symbol_info_tick('BTCUSD').ask ,mt.positions_get()[0]._asdict()['ticket'])
     #print(result)
 
-    async def initialize_mt5(self):
+    async def initialize_mt5_Function(self):
         if not self.mt.initialize():
-            logger.error("MetaTrader5 initialization failed")
+            The_logger.error("MetaTrader5 initialization failed")
             print(Fore.RED + Style.BRIGHT + f"MetaTrader5 initialization failed" + Style.RESET_ALL)
             raise RuntimeError("MetaTrader5 initialization failed")
 
-    async def login_mt5(self):
+    async def login_mt5_Function(self):
         global config
         if not self.mt.login(config["account_info"]["login"], config["account_info"]["password"], config["account_info"]["server"]):
-            logger.error("MetaTrader5 login failed")
+            The_logger.error("MetaTrader5 login failed")
             print(Fore.RED + Style.BRIGHT + f"MetaTrader5 login failed" + Style.RESET_ALL)
             raise RuntimeError("MetaTrader5 login failed")
-        else:
-            # print(Fore.GREEN + Style.BRIGHT + f"logged in as {config['account_info']['login']} in {config['account_info']['server']} server")
-            return
 
-    async def fetch_data(self,timeframe = "M15"):
+    async def fetch_data_Function(self, The_timeframe = "M15"):
         global timeframe_mapping
         global config
-        selected_timeframe = self.timeframe_mapping.get(timeframe, None)
+        selected_timeframe = self.timeframe_mapping.get(The_timeframe, None)
         try:
             symbol_info = self.mt.symbol_info(config["trading_configs"]["asset"])
             if symbol_info is None or not symbol_info.trade_mode:
@@ -111,26 +108,25 @@ class Metatrader_Module:
                                                            0, 
                                                            10000))
             DataSet['time'] = pd.to_datetime(DataSet["time"], unit='s')
-            print(Fore.GREEN + Style.BRIGHT + f"||||||||||||||||||| Data {timeframe} successfully fetched |||||||||||||||||||" + Style.RESET_ALL)
+            print(Fore.LIGHTBLACK_EX + Style.DIM + f"--------- Data {The_timeframe} successfully fetched ---------" + Style.RESET_ALL)
             return DataSet
         except Exception as e:
-            logger.error(f"Failed to fetch data: {e}")
+            The_logger.error(f"Failed to fetch data: {e}")
             print(Fore.RED + Style.BRIGHT + f"Failed to fetch data: {e}" + Style.RESET_ALL)
             raise RuntimeError(f"Failed to fetch data: {e}")
 
-    async def main_fetching_data(self ,atimeframe = 'M15' ):
+    async def main_fetching_data_Function(self, atimeframe = 'M15') -> pd.DataFrame:
         try:
-            await self.initialize_mt5()
-            await self.login_mt5()
-            print(Fore.BLUE + Style.DIM + f"Fetching {atimeframe} Data..." +  Style.RESET_ALL)
-            data = await self.fetch_data(atimeframe)
-            print(Fore.BLACK + Style.DIM + f"Fetched {atimeframe} Data: \n{data}" + Style.RESET_ALL)
-            return data
-        except Exception as e:
-            logger.error(f"An error occurred in main_fetching_data: {e}")
-            print(Fore.RED + Style.BRIGHT + f"An error occurred in main_fetching_data: {e}" + Style.RESET_ALL)
-            return pd.DataFrame
+            await self.initialize_mt5_Function()
+            await self.login_mt5_Function()
+            print(Fore.LIGHTBLACK_EX + Style.DIM + f"Fetching {atimeframe} Data..." +  Style.RESET_ALL)
+            The_data = await self.fetch_data_Function(atimeframe)
+            return The_data
+        except Exception as The_error:
+            The_logger.error(f"An error occurred in main_fetching_data: {The_error}")
+            print(Fore.RED + Style.BRIGHT + f"An error occurred in main_fetching_data: {The_error}" + Style.RESET_ALL)
+            return pd.DataFrame()
         # finally:
         #     mt.shutdown()
 
-CMetatrader_Module = Metatrader_Module()
+CMetatrader_Module = Metatrader_Module_Class()

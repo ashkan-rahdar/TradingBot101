@@ -11,57 +11,29 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 with open("./config.json", "r") as file:
     config = json.load(file)
 
-from classes.Flag_Detector import FlagDetector
-from classes.Flag import Flag
-from functions.logger import logger
-from functions.run_with_retries import run_with_retries
+from classes.Flag_Detector import FlagDetector_Class
+from classes.Flag import Flag_Class
+from functions.logger import The_logger
+from functions.run_with_retries import run_with_retries_Function
 from functions.Figure_Flag import Figure_Flag
 from functions.Reaction_detector import main_reaction_detector
-from classes.Database import Database
+from classes.Database import Database_Class
 
-class Timeframe:
-    def __init__(self, timeframe: str):
-        self.timeframe = timeframe
+class Timeframe_Class:
+    def __init__(self, The_timeframe: str):
+        self.timeframe = The_timeframe
         global config
-        self.MySQL_DataBase = Database(timeframe)
-        self.detector = FlagDetector(timeframe, self.MySQL_DataBase)
+        self.MySQL_DataBase = Database_Class(The_timeframe)
+        self.detector = FlagDetector_Class(The_timeframe, self.MySQL_DataBase)
     
-    def set_data(self, DataSet: pd.DataFrame):
-        self.DataSet = DataSet
+    def set_data_Function(self, aDataSet: pd.DataFrame):
+        self.DataSet = aDataSet
 
-    async def detect_flags(self):
+    async def detect_flags_Function(self):
         try:
-            await run_with_retries(self.detector.run_detection,self.DataSet)
-            # self.FLAGS = self.detector.flags
-            # print(Fore.BLACK + Style.DIM + f"{self.timeframe} Flags: \n {self.FLAGS}" + Style.RESET_ALL)
-        except RuntimeError as e:
-            logger.error(f"{self.timeframe} Flag detection failed: {e}")
-            # self.FLAGS = pd.DataFrame()
-
-    # async def save_to_excel(self):
-    #     file_name = f"{self.timeframe}_FLAGS.xlsx"
-    #     sheet_name = "Flags Data"
-
-    #     try:
-    #         if not os.path.exists(file_name):
-    #             with pd.ExcelWriter(file_name, engine="openpyxl", mode="w") as writer:
-    #                 self.FLAGS.to_excel(writer, index=False, sheet_name=sheet_name)
-    #         else:
-    #             with pd.ExcelWriter(file_name, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
-    #                 self.FLAGS.to_excel(writer, index=False, sheet_name=sheet_name)
-            
-    #         print(f"Updated {file_name} at {pd.Timestamp.now()}")
-    #     except Exception as e:
-    #         print(f"Failed to save to Excel: {e}")
-
-    async def save_to_DB(self):
-        try:
-            for _, flag in self.FLAGS.iterrows():
-                print(type(flag))
-                await self.MySQL_DataBase.save_data(flag)
-        except Exception as e:
-            print(Fore.RED + Style.BRIGHT + f"An error occurred in saving Data in DB: {e}" + Style.RESET_ALL)
-            logger.critical(f"An error occurred in saving Data in DB: {e}")
+            await run_with_retries_Function(self.detector.run_detection_Function,self.DataSet)
+        except RuntimeError as The_error:
+            The_logger.error(f"{self.timeframe} Flag detection failed: {The_error}")
     
     # async def development(self, account_info):
     #     if config["runtime"]["development"]["status"]:
@@ -83,4 +55,4 @@ class Timeframe:
     #             print(Fore.RED + Style.BRIGHT + f"Reaction detection failed: {e}" + Style.RESET_ALL)
     #             # Emergency fallback action, e.g., reset trades
 
-CTimeFrames = [Timeframe(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]
+CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]
