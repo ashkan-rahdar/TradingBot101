@@ -1,3 +1,5 @@
+from colorama import Fore,Style
+print(Fore.BLUE + Style.BRIGHT + "Welcome To Ashkan's EA..." + Style.RESET_ALL)
 import mysql.connector
 import asyncio
 import pandas as pd
@@ -5,7 +7,6 @@ import signal
 import sys
 import os
 import json
-from colorama import Fore,Style
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -43,6 +44,31 @@ def emergency_handler_Function(sig, frame):
     The_logger.critical("Process terminated by user.")
     sys.exit(0)
 
+async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
+    global The_emergency_flag
+    # Step 1: Fetch Data
+    try:
+        The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe)
+    except RuntimeError as The_error:
+        The_logger.critical(f"Critical failure in fetching {The_timeframe} data: {The_error}")
+        print(Fore.RED + Style.BRIGHT + f"Critical failure in fetching {The_timeframe} data: {The_error}" +  Style.RESET_ALL)
+        The_emergency_flag = True
+        The_emergency_event.set()
+        The_Collected_DataSet = pd.DataFrame()
+
+    CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
+
+    # Step 2: Detect Flags
+    await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
+
+    # step 3: Development
+    # await run_with_retries(CTimeFrames[index].development, CMetatrader_Module.mt.account_info())
+
+    try:
+        await asyncio.wait_for(The_emergency_event.wait(), timeout=config["runtime"]["time_between_timeframes"])
+    except asyncio.TimeoutError:
+        pass
+
 async def main():
     global The_emergency_flag
 
@@ -51,6 +77,9 @@ async def main():
             tasks = []
             # Step 1: Updating Data, Flags, and excels of each timeframes
             for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
+                print(Fore.LIGHTBLACK_EX + Style.DIM + f"Main: --------- TimeFrame {The_timeframe} :  ---------" + Style.RESET_ALL)
+                The_logger.info(f"Main: --------- TimeFrame {The_timeframe} :  ---------")
+
                 task = asyncio.create_task(Each_TimeFrame_Function(The_index, The_timeframe))
                 tasks.append(task)
                 if The_emergency_flag:
@@ -79,31 +108,6 @@ async def main():
         # Perform emergency actions here
         print(Fore.MAGENTA + "an example of emergency actions is this print" + Style.RESET_ALL)
         The_logger.critical("Performing emergency actions...")
-
-async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
-    global The_emergency_flag
-    # Step 1: Fetch Data
-    try:
-        The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe)
-    except RuntimeError as The_error:
-        The_logger.critical(f"Critical failure in fetching {The_timeframe} data: {The_error}")
-        print(Fore.RED + Style.BRIGHT + f"Critical failure in fetching {The_timeframe} data: {The_error}" +  Style.RESET_ALL)
-        The_emergency_flag = True
-        The_emergency_event.set()
-        The_Collected_DataSet = pd.DataFrame()
-
-    CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
-
-    # Step 2: Detect Flags
-    await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
-
-    # step 3: Development
-    # await run_with_retries(CTimeFrames[index].development, CMetatrader_Module.mt.account_info())
-
-    try:
-        await asyncio.wait_for(The_emergency_event.wait(), timeout=config["runtime"]["time_between_timeframes"])
-    except asyncio.TimeoutError:
-        pass
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, emergency_handler_Function)

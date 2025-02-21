@@ -108,20 +108,20 @@ class Metatrader_Module_Class:
                                                            0, 
                                                            10000))
             DataSet['time'] = pd.to_datetime(DataSet["time"], unit='s')
-            print(Fore.LIGHTBLACK_EX + Style.DIM + f"--------- Data {The_timeframe} successfully fetched ---------" + Style.RESET_ALL)
+            print(Fore.GREEN + Style.BRIGHT + f"MetaTrader Module: --------- Data {The_timeframe} successfully fetched ---------" + Style.RESET_ALL)
             return DataSet
         except Exception as e:
-            The_logger.error(f"Failed to fetch data: {e}")
-            print(Fore.RED + Style.BRIGHT + f"Failed to fetch data: {e}" + Style.RESET_ALL)
-            raise RuntimeError(f"Failed to fetch data: {e}")
+            The_logger.error(f"MetaTrader Module: --------- Failed to fetch data: {e} ---------")
+            print(Fore.RED + Style.BRIGHT + f"MetaTrader Module: --------- Failed to fetch data: {e} ---------" + Style.RESET_ALL)
+            raise RuntimeError(f"MetaTrader Module: --------- Failed to fetch data: {e} ---------")
 
     async def main_fetching_data_Function(self, atimeframe = 'M15') -> pd.DataFrame:
         try:
             await self.initialize_mt5_Function()
             await self.login_mt5_Function()
-            print(Fore.LIGHTBLACK_EX + Style.DIM + f"Fetching {atimeframe} Data..." +  Style.RESET_ALL)
+            print(Fore.LIGHTBLACK_EX + Style.DIM + f"MetaTrader Module: --------- Fetching {atimeframe} Data... ---------" +  Style.RESET_ALL)
             The_data = await self.fetch_data_Function(atimeframe)
-            print(Fore.LIGHTBLACK_EX + Style.DIM + f"10000 candles in {atimeframe} fetched from {The_data['time'][0]} to {The_data['time'][len(The_data['time']) - 1]}" + Style.RESET_ALL)
+            print(Fore.LIGHTBLACK_EX + Style.DIM + f"MetaTrader Module: --------- 10000 candles in {atimeframe} fetched from {The_data['time'][0]} to {The_data['time'][len(The_data['time']) - 1]} ---------" + Style.RESET_ALL)
             return The_data
         except Exception as The_error:
             The_logger.error(f"An error occurred in main_fetching_data: {The_error}")
