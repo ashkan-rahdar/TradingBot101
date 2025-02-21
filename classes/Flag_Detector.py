@@ -18,6 +18,7 @@ class FlagDetector_Class:
         self.DataBase = The_DataBase
         self.DB_name_flag_points_table = f"Flag_Points_{The_timeframe}"
         self.DB_name_flags_table = f"Flags_{The_timeframe}"
+        self.TimeFrame = The_timeframe
 
     def detect_local_extremes_Function(self, The_dataset: pd.DataFrame):
         """Precompute local maxima and minima for the dataset."""
@@ -35,8 +36,8 @@ class FlagDetector_Class:
     async def detect_bullish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bullish Flags."""
         local_tasks = []
-        The_logger.info("Detecting Bullish Flags...")
-        print(Fore.LIGHTBLUE_EX + Style.DIM +"Detecting Bullish Flags..." + Style.RESET_ALL)
+        The_logger.info(f"Bullish Flag Detecting of {self.TimeFrame} started...")
+        print(Fore.LIGHTBLUE_EX + Style.DIM +f"Bullish Flag Detecting of {self.TimeFrame} started..." + Style.RESET_ALL)
         highs = The_dataset['high']
         lows = The_dataset['low']
 
@@ -89,8 +90,8 @@ class FlagDetector_Class:
     async def detect_bearish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bearish Flags."""
         local_tasks = []
-        The_logger.info("Detecting Bearish Flags...")
-        print(Fore.LIGHTCYAN_EX + Style.DIM +"Detecting Bearish Flags..." + Style.RESET_ALL)
+        The_logger.info(f"Bearish Flag Detecting of {self.TimeFrame} started...")
+        print(Fore.LIGHTCYAN_EX + Style.DIM +f"Bearish Flag Detecting of {self.TimeFrame} started..." + Style.RESET_ALL)
         highs = The_dataset['high']
         lows = The_dataset['low']
 
@@ -149,7 +150,7 @@ class FlagDetector_Class:
             tasks.append(asyncio.create_task(self.detect_bullish_flags_Function(The_dataset)))
             tasks.append(asyncio.create_task(self.detect_bearish_flags_Function(The_dataset)))
             await asyncio.gather(*tasks)
-            The_logger.info("|||||||||||||| Detection complete ||||||||||||||||||")
+            The_logger.info(f"|||||||||||||| Flag Detection of {self.TimeFrame} completed ||||||||||||||||||")
             print(Fore.GREEN + Style.BRIGHT + "|||||||||||||| Detection complete ||||||||||||||||||" + Style.RESET_ALL)
         except Exception as e:
             The_logger.error(f"An error occurred during detection: {e}")
