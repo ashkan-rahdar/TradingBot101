@@ -86,7 +86,7 @@ class Database_Class:
         low_id = self._insert_flag_point_Function(The_flag.low)
         ftc_id = self._insert_important_dp_Function(The_flag.FTC) if The_flag.FTC else None
         el_id = self._insert_important_dp_Function(The_flag.EL) if The_flag.EL else None
-        mpl_id = self._insert_important_dp_Function(The_flag.EL) if The_flag.EL else None
+        mpl_id = self._insert_important_dp_Function(The_flag.MPL) if The_flag.MPL else None
         
         self.cursor.execute(
             f"""INSERT INTO {self.flags_table_name} (type, High, Low, Starting_time, Ending_time, FTC, EL, MPL, weight)

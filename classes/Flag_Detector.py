@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import asyncio
 import sys
 import os
 from colorama import Fore, Style
@@ -33,142 +34,121 @@ class FlagDetector_Class:
 
     async def detect_bullish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bullish Flags."""
+        local_tasks = []
         The_logger.info("Detecting Bullish Flags...")
-        print(Fore.LIGHTGREEN_EX + Style.BRIGHT +"Detecting Bullish Flags..." + Style.RESET_ALL)
+        print(Fore.LIGHTBLUE_EX + Style.DIM +"Detecting Bullish Flags..." + Style.RESET_ALL)
         highs = The_dataset['high']
         lows = The_dataset['low']
 
         local_max_indices = np.where(The_dataset['is_local_max'].to_numpy())[0]
-        for i in local_max_indices:
-            high_of_flag = highs[i]
+        for anIndex in local_max_indices:
+            local_tasks.append(asyncio.create_task(self.Each_bullish_detection_Function(highs,lows,anIndex,The_dataset, local_tasks)))
 
-            # Find end of flag
-            end_of_flag_indices = np.where((highs[i + 1:] > high_of_flag))[0] if i+1 < len(lows) else np.array([])
-            if end_of_flag_indices.size == 0:
-                continue
-            end_of_flag_index = i + 1 + end_of_flag_indices[0]
+        await asyncio.gather(*local_tasks)
 
-            if end_of_flag_index - i <= 15:
-                continue
+    async def Each_bullish_detection_Function(self, The_highs, The_lows, The_index, The_dataset, The_local_tasks):
+        high_of_flag = The_highs[The_index]
 
-            # Find low of flag (lowest low between i and end_of_flag_index)
-            low_of_flag = lows[i:end_of_flag_index + 1].min()
-            low_of_flag_index = i + np.where(lows[i:end_of_flag_index + 1] == low_of_flag)[0][-1]
+        # Find end of flag
+        end_of_flag_indices = np.where((The_highs[The_index + 1:] > high_of_flag))[0] if The_index+1 < len(The_lows) else np.array([])
+        if end_of_flag_indices.size == 0:
+            return
+        end_of_flag_index = The_index + 1 + end_of_flag_indices[0]
 
-            # Find start of flag (first low lower than low_of_flag)
-            start_of_flag_index = None
-            for j in range(1, i):
-                if highs[i-j] >= high_of_flag:
-                    break
-                elif lows[i-j] < low_of_flag:
-                    start_of_flag_index = i-j
-                    break
-            
-            if start_of_flag_index is None:
-                continue
-            
-            # checking if is not a minor flag
-            minor_indexes = np.where(highs[i+1:end_of_flag_index] > high_of_flag)[0] if i+1 < len(lows) else np.array([])
-            if minor_indexes.size > 0:
-                if minor_indexes[0] + i + 1 < low_of_flag_index:
-                    continue
-            
-            # finding valid indexes for EL
-            start_indices_EL = np.where((highs[i + 1:] > high_of_flag) & (lows[i + 1:] > high_of_flag))[0] if i+1 < len(lows) else np.array([])
-            if start_indices_EL.size == 0:
-                start_index_EL = None
-            else:
-                used_flag_indices =  np.where((lows[end_of_flag_index:] < low_of_flag))[0]
-                if used_flag_indices.size != 0 and used_flag_indices[0] + end_of_flag_index < start_indices_EL[0] + i + 1:
-                    start_index_EL = None
-                else:
-                    start_index_EL = i + 1 + start_indices_EL[0]
-            # Append valid flag
-            flag = Flag_Class(
-                The_flag_id= The_dataset['time'][i],
-                The_flag_type=("Bullish" if low_of_flag_index != i else "Undefined"),
-                The_high=FlagPoint_Class(price= high_of_flag,index= i, time=The_dataset["time"][i]),
-                The_low=FlagPoint_Class(price= low_of_flag, index= low_of_flag_index, time= The_dataset["time"][low_of_flag_index]),
-                The_data_in_flag= The_dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
-                The_start_index= start_of_flag_index,
-                The_end_index= end_of_flag_index,
-                The_start_FTC= end_of_flag_index,
-                The_start_EL= start_index_EL
-            )
-            await self.add_flag_Function(flag)
+        if end_of_flag_index - The_index <= 15:
+            return
+
+        # Find low of flag (lowest low between i and end_of_flag_index)
+        low_of_flag = The_lows[The_index:end_of_flag_index + 1].min()
+        low_of_flag_index = The_index + np.where(The_lows[The_index:end_of_flag_index + 1] == low_of_flag)[0][-1]
+
+        # Find start of flag (first low lower than low_of_flag)
+        start_of_flag_index = None
+        for j in range(1, The_index):
+            if The_highs[The_index-j] >= high_of_flag:
+                break
+            elif The_lows[The_index-j] < low_of_flag:
+                start_of_flag_index = The_index-j
+                break
+        
+        if start_of_flag_index is None:
+            return
+        
+        # Append valid flag
+        flag = Flag_Class(
+            The_flag_type=("Bullish" if low_of_flag_index != The_index else "Undefined"),
+            The_high=FlagPoint_Class(price= high_of_flag,index= The_index, time=The_dataset["time"][The_index]),
+            The_low=FlagPoint_Class(price= low_of_flag, index= low_of_flag_index, time= The_dataset["time"][low_of_flag_index]),
+            The_data_in_flag= The_dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
+            The_start_index= start_of_flag_index,
+            The_end_index= end_of_flag_index,
+            The_start_FTC= end_of_flag_index)
+        
+        The_local_tasks.append(asyncio.create_task(self.add_flag_Function(flag)))
+
     async def detect_bearish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bearish Flags."""
+        local_tasks = []
         The_logger.info("Detecting Bearish Flags...")
-        print(Fore.LIGHTRED_EX + Style.BRIGHT +"Detecting Bearish Flags..." + Style.RESET_ALL)
+        print(Fore.LIGHTCYAN_EX + Style.DIM +"Detecting Bearish Flags..." + Style.RESET_ALL)
         highs = The_dataset['high']
         lows = The_dataset['low']
 
         local_min_indices = np.where(The_dataset['is_local_min'].to_numpy())[0]
-        for i in local_min_indices:
-            low_of_flag = lows[i]
+        for anindex in local_min_indices:
+            local_tasks.append(asyncio.create_task(self.Each_bearish_detection_Function(highs,lows,anindex, The_dataset, local_tasks)))
 
-            # Find end of flag
-            end_of_flag_indices = np.where((lows[i + 1:] < low_of_flag))[0] if i+1 < len(lows) else np.array([])
-            if end_of_flag_indices.size == 0:
-                continue
-            end_of_flag_index = i + 1 + end_of_flag_indices[0]
+        await asyncio.gather(*local_tasks)
 
-            if end_of_flag_index - i <= 15:
-                continue
+    async def Each_bearish_detection_Function(self, The_highs, The_lows, The_index, The_dataset, The_local_tasks):
+        low_of_flag = The_lows[The_index]
 
-            # Find high of flag (highest high between i and end_of_flag_index)
-            high_of_flag = highs[i:end_of_flag_index + 1].max()
-            high_of_flag_index = i + np.where(highs[i:end_of_flag_index + 1] == high_of_flag)[0][-1]
+        # Find end of flag
+        end_of_flag_indices = np.where((The_lows[The_index + 1:] < low_of_flag))[0] if The_index+1 < len(The_lows) else np.array([])
+        if end_of_flag_indices.size == 0:
+            return
+        end_of_flag_index = The_index + 1 + end_of_flag_indices[0]
 
-            # Find start of flag (first high lower than high_of_flag)
-            start_of_flag_index = None
-            for j in range(1, i):
-                if lows[i-j] <= low_of_flag:
-                    break
-                elif highs[i-j] > high_of_flag:
-                    start_of_flag_index = i-j
-                    break
-            
-            if start_of_flag_index is None:
-                continue
+        if end_of_flag_index - The_index <= 15:
+            return
 
-            # checking if is not a minor flag
-            minor_indexes = np.where(lows[i+1:end_of_flag_index] < low_of_flag)[0] if i+1 < len(lows) else np.array([])
-            if minor_indexes.size > 0:
-                if minor_indexes[0] + i + 1 < high_of_flag_index:
-                    continue  
-            
-            # finding valid indexes for EL
-            start_indices_EL = np.where((lows[i + 1:] < low_of_flag) & (highs[i + 1:] < low_of_flag))[0] if i+1 < len(lows) else np.array([])
-            if start_indices_EL.size == 0:
-                start_index_EL = None
-            else:
-                used_flag_indices =  np.where((highs[end_of_flag_index:] > high_of_flag))[0]
-                if used_flag_indices.size != 0 and used_flag_indices[0] + end_of_flag_index < start_indices_EL[0] + i + 1:
-                    start_index_EL = None
-                else:
-                    start_index_EL = i + 1 + start_indices_EL[0]
+        # Find high of flag (highest high between i and end_of_flag_index)
+        high_of_flag = The_highs[The_index:end_of_flag_index + 1].max()
+        high_of_flag_index = The_index + np.where(The_highs[The_index:end_of_flag_index + 1] == high_of_flag)[0][-1]
 
-            # Append valid flag
-            flag = Flag_Class(
-                The_flag_id= The_dataset['time'][i],
-                The_flag_type= ("Bearish" if high_of_flag_index != i else "Undefined"),
-                The_high=FlagPoint_Class(price= high_of_flag, index= high_of_flag_index, time= The_dataset["time"][high_of_flag_index]),
-                The_low=FlagPoint_Class(price= low_of_flag, index= i, time= The_dataset["time"][i]),
-                The_data_in_flag= The_dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
-                The_start_index= start_of_flag_index,
-                The_end_index= end_of_flag_index,
-                The_start_FTC= end_of_flag_index,
-                The_start_EL= start_index_EL
-            )
-            await self.add_flag_Function(flag)
+        # Find start of flag (first high lower than high_of_flag)
+        start_of_flag_index = None
+        for j in range(1, The_index):
+            if The_lows[The_index-j] <= low_of_flag:
+                break
+            elif The_highs[The_index-j] > high_of_flag:
+                start_of_flag_index = The_index-j
+                break
+        
+        if start_of_flag_index is None:
+            return
+        
+        # Append valid flag
+        flag = Flag_Class(
+            The_flag_type= ("Bearish" if high_of_flag_index != The_index else "Undefined"),
+            The_high=FlagPoint_Class(price= high_of_flag, index= high_of_flag_index, time= The_dataset["time"][high_of_flag_index]),
+            The_low=FlagPoint_Class(price= low_of_flag, index= The_index, time= The_dataset["time"][The_index]),
+            The_data_in_flag= The_dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
+            The_start_index= start_of_flag_index,
+            The_end_index= end_of_flag_index,
+            The_start_FTC= end_of_flag_index
+        )
+
+        The_local_tasks.append(asyncio.create_task(self.add_flag_Function(flag)))
             
     async def run_detection_Function(self, The_dataset: pd.DataFrame):
         """Run flag detection for both Bullish and Bearish flags."""
+        tasks = []
         try:
-            self.detect_local_extremes_Function(The_dataset)  # Precompute local extremes
-            await self.detect_bullish_flags_Function(The_dataset)
-            await self.detect_bearish_flags_Function(The_dataset)
+            self.detect_local_extremes_Function(The_dataset)
+            tasks.append(asyncio.create_task(self.detect_bullish_flags_Function(The_dataset)))
+            tasks.append(asyncio.create_task(self.detect_bearish_flags_Function(The_dataset)))
+            await asyncio.gather(*tasks)
             The_logger.info("|||||||||||||| Detection complete ||||||||||||||||||")
             print(Fore.GREEN + Style.BRIGHT + "|||||||||||||| Detection complete ||||||||||||||||||" + Style.RESET_ALL)
         except Exception as e:

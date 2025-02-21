@@ -121,6 +121,7 @@ class Metatrader_Module_Class:
             await self.login_mt5_Function()
             print(Fore.LIGHTBLACK_EX + Style.DIM + f"Fetching {atimeframe} Data..." +  Style.RESET_ALL)
             The_data = await self.fetch_data_Function(atimeframe)
+            print(Fore.LIGHTBLACK_EX + Style.DIM + f"10000 candles in {atimeframe} fetched from {The_data['time'][0]} to {The_data['time'][len(The_data['time']) - 1]}" + Style.RESET_ALL)
             return The_data
         except Exception as The_error:
             The_logger.error(f"An error occurred in main_fetching_data: {The_error}")

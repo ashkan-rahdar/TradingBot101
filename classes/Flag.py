@@ -17,18 +17,15 @@ with open("./config.json", "r") as file:
     config = json.load(file)
 
 class Flag_Class:
-    def __init__(self, 
-                 The_flag_id: pd.Series, 
+    def __init__(self,  
                  The_flag_type: typing.Literal["Bullish", "Bearish","Undefined"], 
                  The_high: FlagPoint_Class, 
                  The_low: FlagPoint_Class, 
                  The_data_in_flag: pd.DataFrame, 
                  The_start_index: int, 
                  The_end_index: int, 
-                 The_start_FTC: int,
-                 The_start_EL: int):
-        
-        self.flag_id = The_flag_id
+                 The_start_FTC: int):
+
         self.flag_type: typing.Literal["Bullish", "Bearish","Undefined"] = The_flag_type
         self.high = The_high
         self.low = The_low
@@ -59,10 +56,16 @@ class Flag_Class:
                                             flag_type = EL_direction,
                                             start_of_index= self.Start_index)
         self.EL.type = "EL"
-        self.EL.start_index = The_start_EL
         self.weight = self.weight_of_flag_Function()
         self.status :typing.Literal["Major", "Minor","Undefined"] = "Major"
         
+
+        if The_flag_type == "Bullish":
+            self.MPL = DP_Parameteres_Class(self.high, self.EL.High)
+        elif The_flag_type == "Bearish":
+            self.MPL = DP_Parameteres_Class(self.low, self.EL.Low)
+        else:
+            self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
         # self.validate_DP(
         #     Important_DP=self.FTC,
         #     dataset= (data_in_flag.iloc[low.index - start_index + 1:] if flag_type=="Bullish" 
@@ -174,6 +177,6 @@ class Flag_Class:
                         break
     
     def __repr__(self):
-        return (f"Flag is like ID: {self.flag_id}, Type: {self.flag_type}, High: {self.high}, Low: {self.low}, "
+        return (f"The Detected Flag: Type: {self.flag_type}, High: {self.high}, Low: {self.low}, "
                 f"Start index: {self.Start_index}, End index: {self.End_index}, EL: {self.EL}, "
                 f"Duration: {self.duration}, FTC: {self.FTC}")
