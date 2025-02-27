@@ -48,7 +48,7 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
     global The_emergency_flag
     # Step 1: Fetch Data
     try:
-        The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe)
+        The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
     except RuntimeError as The_error:
         The_logger.critical(f"Critical failure in fetching {The_timeframe} data: {The_error}")
         print(Fore.RED + Style.BRIGHT + f"Critical failure in fetching {The_timeframe} data: {The_error}" +  Style.RESET_ALL)
@@ -62,12 +62,13 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
     await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
 
     # step 3: Development
-    # await run_with_retries(CTimeFrames[index].development, CMetatrader_Module.mt.account_info())
+    # await run_with_retries_Function(CTimeFrames[The_index].development, CMetatrader_Module.mt.account_info())
 
     try:
-        await asyncio.wait_for(The_emergency_event.wait(), timeout=config["runtime"]["time_between_timeframes"])
-    except asyncio.TimeoutError:
-        pass
+        await run_with_retries_Function(CMetatrader_Module.Update_Flags_Function)
+    except RuntimeError as The_error:
+        The_logger.critical(f"Critical failure in updating Positions: {The_error}")
+        print(Fore.RED + Style.BRIGHT + f"Critical failure in updating Positions: {The_error}" +  Style.RESET_ALL)
 
 async def main():
     global The_emergency_flag
@@ -75,7 +76,6 @@ async def main():
     while not The_emergency_flag:
         try:
             tasks = []
-            # Step 1: Updating Data, Flags, and excels of each timeframes
             for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
                 print(Fore.LIGHTBLACK_EX + Style.DIM + f"Main: --------- TimeFrame {The_timeframe} :  ---------" + Style.RESET_ALL)
                 The_logger.info(f"Main: --------- TimeFrame {The_timeframe} :  ---------")
@@ -86,23 +86,10 @@ async def main():
                     break
             await asyncio.gather(*tasks)
 
-            #Step 2: update positions
-            try:
-                await run_with_retries_Function(CMetatrader_Module.Update_Flags_Function)
-            except RuntimeError as The_error:
-                The_logger.critical(f"Critical failure in updating Positions: {The_error}")
-                print(Fore.RED + Style.BRIGHT + f"Critical failure in updating Positions: {The_error}" +  Style.RESET_ALL)
-
         except Exception as The_error:
             The_logger.critical(f"Unhandled error in main loop: {The_error}")
             The_emergency_flag = True
             The_emergency_event.set()
-
-        # Wait for 5 minutes or until emergency_event is set
-        try:
-            await asyncio.wait_for(The_emergency_event.wait(), timeout=config["runtime"]["refresh_Data_time"])
-        except asyncio.TimeoutError:
-            pass
 
     if The_emergency_flag:
         # Perform emergency actions here

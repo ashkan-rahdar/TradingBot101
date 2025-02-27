@@ -4,6 +4,7 @@ from datetime import datetime
 import json
 import sys
 import os
+import asyncio
 from colorama import Fore, Style
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -94,7 +95,7 @@ class Metatrader_Module_Class:
             print(Fore.RED + Style.BRIGHT + f"MetaTrader5 login failed" + Style.RESET_ALL)
             raise RuntimeError("MetaTrader5 login failed")
 
-    async def fetch_data_Function(self, The_timeframe = "M15"):
+    async def fetch_data_Function(self, The_timeframe = "M15", The_Dataset: pd.DataFrame = pd.DataFrame()):
         global timeframe_mapping
         global config
         selected_timeframe = self.timeframe_mapping.get(The_timeframe, None)
@@ -103,24 +104,32 @@ class Metatrader_Module_Class:
             if symbol_info is None or not symbol_info.trade_mode:
                 print(Fore.CYAN + Style.BRIGHT + "symbol is invalid or market is close now" + Style.RESET_ALL)
 
-            DataSet = pd.DataFrame(self.mt.copy_rates_from_pos(config["trading_configs"]["asset"], 
-                                                           selected_timeframe, 
-                                                           0, 
-                                                           10000))
-            DataSet['time'] = pd.to_datetime(DataSet["time"], unit='s')
-            print(Fore.GREEN + Style.BRIGHT + f"MetaTrader Module: --------- Data {The_timeframe} successfully fetched ---------" + Style.RESET_ALL)
-            return DataSet
+            if len(The_Dataset) != 0:
+                    print(Fore.LIGHTBLACK_EX + Style.DIM + f"MetaTrader Module: --------- Waiting for new {The_timeframe} candles... ---------" + Style.RESET_ALL)
+
+            while True:
+                DataSet = pd.DataFrame(self.mt.copy_rates_from_pos(config["trading_configs"]["asset"], 
+                                                            selected_timeframe, 
+                                                            0, 
+                                                            10000))
+                DataSet['time'] = pd.to_datetime(DataSet["time"], unit='s')
+                
+                if len(The_Dataset) == 0 or The_Dataset['time'].iloc[-1] != DataSet['time'].iloc[-1]:
+                    print(Fore.GREEN + Style.BRIGHT + f"MetaTrader Module: --------- Data {The_timeframe} successfully fetched ---------" + Style.RESET_ALL)
+                    return DataSet
+                
+                await asyncio.sleep(30)
         except Exception as e:
             The_logger.error(f"MetaTrader Module: --------- Failed to fetch data: {e} ---------")
             print(Fore.RED + Style.BRIGHT + f"MetaTrader Module: --------- Failed to fetch data: {e} ---------" + Style.RESET_ALL)
             raise RuntimeError(f"MetaTrader Module: --------- Failed to fetch data: {e} ---------")
 
-    async def main_fetching_data_Function(self, atimeframe = 'M15') -> pd.DataFrame:
+    async def main_fetching_data_Function(self, atimeframe = 'M15', aDataset: pd.DataFrame = pd.DataFrame()) -> pd.DataFrame:
         try:
             await self.initialize_mt5_Function()
             await self.login_mt5_Function()
             print(Fore.LIGHTBLACK_EX + Style.DIM + f"MetaTrader Module: --------- Fetching {atimeframe} Data... ---------" +  Style.RESET_ALL)
-            The_data = await self.fetch_data_Function(atimeframe)
+            The_data = await self.fetch_data_Function(atimeframe, aDataset)
             print(Fore.LIGHTBLACK_EX + Style.DIM + f"MetaTrader Module: --------- 10000 candles in {atimeframe} fetched from {The_data['time'][0]} to {The_data['time'][len(The_data['time']) - 1]} ---------" + Style.RESET_ALL)
             return The_data
         except Exception as The_error:

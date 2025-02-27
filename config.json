@@ -16,19 +16,9 @@
         }
     },
     "runtime":{
-        "development": {
-            "status": true,
-            "visualazation":{
-                "status_flags": true,
-                "status_FTC_reaction": true,
-                "status_EL_reaction": true
-            }
-        },
         "emergency_mode":{
             "status": true,
             "password": "ashkan"
-        },
-        "refresh_Data_time": 300, 
-        "time_between_timeframes": 30
+        }
     }
 }
