@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classes.FlagPoint import FlagPoint_Class
-from functions.logger import The_logger
+from functions.logger import print_and_logging_Function
 from classes.DP_Parameteres import DP_Parameteres_Class
 
 

@@ -7,7 +7,7 @@ from colorama import Fore,Style
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classes.Flag import Flag_Class
-from functions.logger import The_logger
+from functions.logger import print_and_logging_Function
 from classes.FlagPoint import FlagPoint_Class
 from classes.DP_Parameteres import DP_Parameteres_Class
 
@@ -17,9 +17,7 @@ class Database_Class:
         self.important_dps_table_name = f"Important_DPs_{The_timeframe}"
         self.flags_table_name = f"Flags_{The_timeframe}"
         self.TimeFrame = The_timeframe
-        print(Fore.LIGHTBLACK_EX + Style.DIM + f"DataBase: --------- The DataBase of {The_timeframe} is initializing... ---------" + Style.RESET_ALL)
-        The_logger.error(f"DataBase: --------- The DataBase of {The_timeframe} is initializing... ---------")
-
+        print_and_logging_Function("info", f"The DataBase of {The_timeframe} is initializing...", "description")
         try:
             self.db = mysql.connector.connect(
                 host="localhost",
@@ -31,8 +29,7 @@ class Database_Class:
             self.cursor = self.db.cursor()
             self._initialize_tables_Function()
         except Exception as e:
-            print(Fore.RED + Style.BRIGHT + f"DataBase: --------- An error occured in initialization of DB connection: {e} ---------" + Style.RESET_ALL)
-            The_logger.error(f"DataBase: --------- An error occured in initialization of DB connection: {e} ---------")
+            print_and_logging_Function("error", f"An error occured in initialization of DB connection: {e}", "title")
 
     def _initialize_tables_Function(self):
         queries = [
@@ -79,10 +76,9 @@ class Database_Class:
             for query in queries:
                 self.cursor.execute(query)
             self.db.commit()
-            print(Fore.GREEN + Style.BRIGHT + f"DataBase: ---------{self.TimeFrame} Tables of created successfully! ---------" + Style.RESET_ALL)
+            print_and_logging_Function("info", f"{self.TimeFrame} Tables of created successfully!", "title")
         except Exception as e:
-            print(Fore.RED + Style.BRIGHT + f"DataBase: --------- Couldn't initialize DB for timeframe '{self.flags_table_name}': {e} ---------" + Style.RESET_ALL)
-            The_logger.critical(f"DataBase: --------- Couldn't initialize DB: {e}---------")
+            print_and_logging_Function("error", f"Couldn't initialize DB: {e}", "title")
 
     async def save_data_Function(self, The_flag: Flag_Class):
         high_id = self._insert_flag_point_Function(The_flag.high)

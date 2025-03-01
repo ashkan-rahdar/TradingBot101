@@ -13,7 +13,7 @@ with open("./config.json", "r") as file:
 
 from classes.Flag_Detector import FlagDetector_Class
 from classes.Flag import Flag_Class
-from functions.logger import The_logger
+from functions.logger import print_and_logging_Function
 from functions.run_with_retries import run_with_retries_Function
 from functions.Reaction_detector import main_reaction_detector
 from classes.Database import Database_Class
@@ -33,13 +33,12 @@ class Timeframe_Class:
         try:
             await run_with_retries_Function(self.detector.run_detection_Function,self.DataSet)
         except RuntimeError as The_error:
-            The_logger.error(f"{self.timeframe} Flag detection failed: {The_error}")
+            print_and_logging_Function("error", f"{self.timeframe} Flag detection failed: {The_error}", "title")
     
     async def development(self):
         try:
             await run_with_retries_Function(main_reaction_detector, self.DataSet)
         except RuntimeError as e:
-            The_logger.error(f"Reaction detection failed: {e}")
-            print(Fore.RED + Style.BRIGHT + f"Reaction detection failed: {e}" + Style.RESET_ALL)
+            print_and_logging_Function("error", f"Reaction detection failed: {e}", "title")
 
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

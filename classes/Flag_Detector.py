@@ -8,7 +8,7 @@ from colorama import Fore, Style
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classes.Flag import Flag_Class
-from functions.logger import The_logger
+from functions.logger import print_and_logging_Function
 from classes.FlagPoint import FlagPoint_Class
 from classes.Database import Database_Class    
 
@@ -36,8 +36,7 @@ class FlagDetector_Class:
     async def detect_bullish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bullish Flags."""
         local_tasks = []
-        The_logger.info(f"Flag Detector: --------- Bullish Flag Detecting of {self.TimeFrame} started... ---------")
-        print(Fore.LIGHTBLACK_EX + Style.DIM +f"Flag Detector: --------- Bullish Flag Detecting of {self.TimeFrame} started... ---------" + Style.RESET_ALL)
+        print_and_logging_Function("info", f" Bullish Flag Detecting of {self.TimeFrame} started...", "description")
         highs = The_dataset['high']
         lows = The_dataset['low']
 
@@ -90,8 +89,7 @@ class FlagDetector_Class:
     async def detect_bearish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bearish Flags."""
         local_tasks = []
-        The_logger.info(f"Flag Detector: --------- Bearish Flag Detecting of {self.TimeFrame} started... ---------")
-        print(Fore.LIGHTBLACK_EX + Style.DIM +f"Flag Detector: --------- Bearish Flag Detecting of {self.TimeFrame} started... ---------" + Style.RESET_ALL)
+        print_and_logging_Function("info", f" Bearish Flag Detecting of {self.TimeFrame} started...", "description")
         highs = The_dataset['high']
         lows = The_dataset['low']
 
@@ -150,11 +148,9 @@ class FlagDetector_Class:
             tasks.append(asyncio.create_task(self.detect_bullish_flags_Function(The_dataset)))
             tasks.append(asyncio.create_task(self.detect_bearish_flags_Function(The_dataset)))
             await asyncio.gather(*tasks)
-            The_logger.info(f"Flag Detector: --------- Flag Detection of {self.TimeFrame} completed ---------")
-            print(Fore.GREEN + Style.BRIGHT + f"Flag Detector: --------- Flag Detection of {self.TimeFrame} completed ---------" + Style.RESET_ALL)
+            print_and_logging_Function("info", f"Flag Detection of {self.TimeFrame} completed", "title")
         except Exception as e:
-            print(Fore.GREEN + Style.BRIGHT + f"Flag Detector: --------- An error occurred during detection: {e} ---------" + Style.RESET_ALL)
-            The_logger.error(f"Flag Detector: --------- An error occurred during detection: {e} ---------")
+            print_and_logging_Function("error", f"An error occurred during detection: {e}", "title")
             raise
 
     async def add_flag_Function(self, The_flag: Flag_Class):
@@ -170,4 +166,4 @@ class FlagDetector_Class:
             await self.DataBase.save_data_Function(The_flag)  
 
         except Exception as e:
-            The_logger.critical(f"Error in adding flag {The_flag.flag_id} to DB: {e}")
+            print_and_logging_Function("error", f"Error in adding flag {The_flag.flag_id} to DB: {e}", "title")
