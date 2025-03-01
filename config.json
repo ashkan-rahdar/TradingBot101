@@ -9,7 +9,7 @@
     "trading_configs":{
         "timeframes": ["M1", "M15", "M5"],
         "asset": "EURUSD",
-        
+
         "risk_management":{
             "R" : 0.1,
             "max_wieght": 4
@@ -19,6 +19,7 @@
         "emergency_mode":{
             "status": true,
             "password": "ashkan"
-        }
+        }, 
+        "Another_function_syntax": "ashkan1" 
     }
 }
