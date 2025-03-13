@@ -77,7 +77,10 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
     # Step 2: Detect Flags
     await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
 
-    # step 3: Development
+    # step 3: Validate DPs and Flags
+    await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
+    
+    # step 4: Development
     # await run_with_retries_Function(CTimeFrames[The_index].development, CMetatrader_Module.mt.account_info())
 
     try:

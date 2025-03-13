@@ -34,6 +34,7 @@ class Flag_Class:
         self.End_index = The_end_index
         self.End_time = The_data_in_flag['time'][The_end_index]
         self.Start_time = The_data_in_flag['time'][The_start_index]
+        self.Unique_point = The_high.time if self.flag_type == "Bullish" else The_low.time
 
         self.FTC = self.DP_Detector_Function(
                                             dataset = (The_data_in_flag.iloc[The_high.index - The_start_index:The_low.index - The_start_index] if The_flag_type=="Bullish" 

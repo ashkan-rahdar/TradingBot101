@@ -41,4 +41,7 @@ class Timeframe_Class:
         except RuntimeError as e:
             print_and_logging_Function("error", f"Reaction detection failed: {e}", "title")
 
+    async def validate_DPs_Function(self):
+        return
+
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

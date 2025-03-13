@@ -54,6 +54,7 @@ class Database_Class:
             f"""
             CREATE TABLE IF NOT EXISTS {self.flags_table_name} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                Unique_Point DATETIME NOT NULL,
                 type ENUM('Bullish', 'Bearish', 'Undefined') NOT NULL,
                 High INT NOT NULL,
                 Low INT NOT NULL,
@@ -88,9 +89,9 @@ class Database_Class:
         mpl_id = self._insert_important_dp_Function(The_flag.MPL) if The_flag.MPL else None
         
         self.cursor.execute(
-            f"""INSERT INTO {self.flags_table_name} (type, High, Low, Starting_time, Ending_time, FTC, EL, MPL, weight)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (The_flag.flag_type, high_id, low_id, The_flag.Start_time, The_flag.End_time, ftc_id, el_id, mpl_id, The_flag.weight)
+            f"""INSERT INTO {self.flags_table_name} (Unique_Point, type, High, Low, Starting_time, Ending_time, FTC, EL, MPL, weight)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (The_flag.Unique_point, The_flag.flag_type, high_id, low_id, The_flag.Start_time, The_flag.End_time, ftc_id, el_id, mpl_id, The_flag.weight)
         )
         self.db.commit()
 
@@ -99,14 +100,23 @@ class Database_Class:
         if The_point.price is None or The_point.time is None:
             return None  # Return None for invalid points
 
-        # Proceed with inserting into the database
+        # Check if the point already exists in the database
+        self.cursor.execute(
+            f"SELECT id FROM {self.flag_points_table_name} WHERE price = %s AND time = %s",
+            (The_point.price, The_point.time)
+        )
+        existing_row = self.cursor.fetchone()
+
+        if existing_row:
+            return existing_row[0]  # Return the existing row ID
+
+        # If not exists, insert the new flag_point
         self.cursor.execute(
             f"INSERT INTO {self.flag_points_table_name} (price, time) VALUES (%s, %s)", 
             (The_point.price, The_point.time)
         )
         self.db.commit()
-        return self.cursor.lastrowid  # Return the inserted row's ID
-
+        return self.cursor.lastrowid  # Return the newly inserted row's ID
 
     def _insert_important_dp_Function(self, The_Important_dp: DP_Parameteres_Class) -> int:
         first_id = self._insert_flag_point_Function(The_Important_dp.High)
