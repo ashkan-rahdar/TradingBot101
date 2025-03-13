@@ -67,6 +67,7 @@ class Flag_Class:
             self.MPL = DP_Parameteres_Class(self.low, self.EL.Low)
         else:
             self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
+        self.MPL.type = "MPL"
         # self.validate_DP(
         #     Important_DP=self.FTC,
         #     dataset= (data_in_flag.iloc[low.index - start_index + 1:] if flag_type=="Bullish" 

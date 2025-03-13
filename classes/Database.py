@@ -100,21 +100,25 @@ class Database_Class:
         if The_point.price is None or The_point.time is None:
             return None  # Return None for invalid points
 
-        # Check if the point already exists in the database
-        self.cursor.execute(
-            f"SELECT id FROM {self.flag_points_table_name} WHERE price = %s AND time = %s",
-            (The_point.price, The_point.time)
-        )
+        # Format the time to ensure consistent string representation
+        formatted_time = The_point.time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # First, let's try to find any matching records with extremely precise comparison
+        self.cursor.execute(f""" SELECT id FROM {self.flag_points_table_name} WHERE ABS(price - %s) < 0.0000001 AND time = %s""", 
+                            (The_point.price, formatted_time))
         existing_row = self.cursor.fetchone()
-
+        
         if existing_row:
+            print(f"Found existing record with id: {existing_row[0]}")
             return existing_row[0]  # Return the existing row ID
-
+        
         # If not exists, insert the new flag_point
         self.cursor.execute(
             f"INSERT INTO {self.flag_points_table_name} (price, time) VALUES (%s, %s)", 
-            (The_point.price, The_point.time)
+            (The_point.price, formatted_time)
         )
+        
+        # Make sure to commit the transaction
         self.db.commit()
         return self.cursor.lastrowid  # Return the newly inserted row's ID
 
