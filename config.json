@@ -7,7 +7,7 @@
         "spread": 0
     },
     "trading_configs":{
-        "timeframes": ["M1", "M15", "M5"],
+        "timeframes": ["M1"],
         "asset": "EURUSD",
 
         "risk_management":{
