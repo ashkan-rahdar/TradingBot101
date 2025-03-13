@@ -149,25 +149,24 @@ class FlagDetector_Class:
             tasks.append(asyncio.create_task(self.detect_bullish_flags_Function(The_dataset)))
             tasks.append(asyncio.create_task(self.detect_bearish_flags_Function(The_dataset)))
             await asyncio.gather(*tasks)
-            print(self.detected_flags)
             print_and_logging_Function("info", f"Flag Detection of {self.TimeFrame} completed", "title")
+            print_and_logging_Function("info", f"{self.detected_flags} New Flags detected", "description")
         except Exception as e:
             print_and_logging_Function("error", f"An error occurred during detection: {e}", "title")
             raise
 
     async def add_flag_Function(self, The_flag: Flag_Class):
-        self.detected_flags += 1
         try:
             # Check if flag already exists in the database
             self.DataBase.cursor.execute(f"SELECT COUNT(*) FROM {self.DB_name_flags_table} WHERE Unique_Point = %s", (The_flag.Unique_point,))
             exists = self.DataBase.cursor.fetchone()[0] > 0
 
             if exists:
-                print(Fore.RED + f"AALLLLLOOOOO   {The_flag.high.time}")
                 return  # Don't insert duplicate flags
 
             # Insert new flag into the database
             await self.DataBase.save_data_Function(The_flag)  
+            self.detected_flags += 1
 
         except Exception as e:
             print_and_logging_Function("error", f"Error in adding flag {The_flag.Unique_point} to DB: {e}", "title")

@@ -109,7 +109,6 @@ class Database_Class:
         existing_row = self.cursor.fetchone()
         
         if existing_row:
-            print(f"Found existing record with id: {existing_row[0]}")
             return existing_row[0]  # Return the existing row ID
         
         # If not exists, insert the new flag_point
