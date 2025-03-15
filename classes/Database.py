@@ -44,11 +44,11 @@ class Database_Class:
             CREATE TABLE IF NOT EXISTS {self.important_dps_table_name} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 type ENUM('FTC', 'EL', 'MPL') NULL,
-                First_Point INT NULL,
-                Second_Point INT NULL,
+                High_Point INT NULL,
+                Low_Point INT NULL,
                 weight FLOAT NULL,
-                FOREIGN KEY (First_Point) REFERENCES {self.flag_points_table_name}(id) ON DELETE SET NULL,
-                FOREIGN KEY (Second_Point) REFERENCES {self.flag_points_table_name}(id) ON DELETE SET NULL
+                FOREIGN KEY (High_Point) REFERENCES {self.flag_points_table_name}(id) ON DELETE SET NULL,
+                FOREIGN KEY (Low_Point) REFERENCES {self.flag_points_table_name}(id) ON DELETE SET NULL
             )
             """,
             f"""
@@ -129,7 +129,7 @@ class Database_Class:
             return None  # Skip insertion
         
         self.cursor.execute(
-            f"""INSERT INTO {self.important_dps_table_name} (type, First_Point, Second_Point, weight)
+            f"""INSERT INTO {self.important_dps_table_name} (type, High_Point, Low_Point, weight)
             VALUES (%s, %s, %s, %s)""",
             (The_Important_dp.type , first_id, second_id, The_Important_dp.weight)
         )
@@ -152,12 +152,21 @@ class Database_Class:
         if pd.isna(The_flag_id): return None
         self.cursor.execute(f"SELECT price, time FROM {self.flag_points_table_name} WHERE id = %s", (The_flag_id,))
         result = self.cursor.fetchone()
-        return FlagPoint_Class(price=result[0], time=result[1])
+        return FlagPoint_Class(price=result[0], time=result[1], index= 1)
 
     def _get_important_dp_Function(self, The_dp_id: int) -> DP_Parameteres_Class:
         if pd.isna(The_dp_id): return None
-        self.cursor.execute(f"SELECT type, First_Point, Second_Point, weight FROM {self.important_dps_table_name} WHERE id = %s", (The_dp_id,))
+        self.cursor.execute(f"SELECT type, High_Point, Low_Point, weight FROM {self.important_dps_table_name} WHERE id = %s", (The_dp_id,))
         result = self.cursor.fetchone()
-        first_point = self._get_flag_point_Function(result[1])
-        second_point = self._get_flag_point_Function(result[2])
-        return DP_Parameteres_Class(type=result[0], first_point=first_point, second_point=second_point, weight=result[3])
+        High_Point = self._get_flag_point_Function(result[1])
+        Low_Point = self._get_flag_point_Function(result[2])
+        return DP_Parameteres_Class(type=result[0], High=High_Point, Low=Low_Point, weight=result[3])
+    
+    def set_important_dp_weight_Function(self, The_dp_id: int, The_weight: int):
+        """Set the weight column for the given important DP ID."""
+        if pd.isna(The_dp_id): return
+        self.cursor.execute(
+            f"UPDATE {self.important_dps_table_name} SET weight = %s WHERE id = %s", 
+            (The_weight,The_dp_id,)
+        )
+        self.db.commit()  # Ensure changes are saved
