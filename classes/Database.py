@@ -47,6 +47,8 @@ class Database_Class:
                 High_Point INT NULL,
                 Low_Point INT NULL,
                 weight FLOAT NULL,
+                first_valid_trade_time DATETIME NOT NULL,
+                trade_direction ENUM('Bullish', 'Bearish', 'Undefined') NULL,
                 FOREIGN KEY (High_Point) REFERENCES {self.flag_points_table_name}(id) ON DELETE SET NULL,
                 FOREIGN KEY (Low_Point) REFERENCES {self.flag_points_table_name}(id) ON DELETE SET NULL
             )
@@ -129,9 +131,9 @@ class Database_Class:
             return None  # Skip insertion
         
         self.cursor.execute(
-            f"""INSERT INTO {self.important_dps_table_name} (type, High_Point, Low_Point, weight)
-            VALUES (%s, %s, %s, %s)""",
-            (The_Important_dp.type , first_id, second_id, The_Important_dp.weight)
+            f"""INSERT INTO {self.important_dps_table_name} (type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction)
+            VALUES (%s, %s, %s, %s, %s, %s)""",
+            (The_Important_dp.type , first_id, second_id, The_Important_dp.weight, The_Important_dp.first_valid_trade_time, The_Important_dp.trade_direction)
         )
         self.db.commit()
         return self.cursor.lastrowid
@@ -152,15 +154,15 @@ class Database_Class:
         if pd.isna(The_flag_id): return None
         self.cursor.execute(f"SELECT price, time FROM {self.flag_points_table_name} WHERE id = %s", (The_flag_id,))
         result = self.cursor.fetchone()
-        return FlagPoint_Class(price=result[0], time=result[1], index= 1)
+        return FlagPoint_Class(price=result[0], time=result[1])
 
     def _get_important_dp_Function(self, The_dp_id: int) -> DP_Parameteres_Class:
         if pd.isna(The_dp_id): return None
-        self.cursor.execute(f"SELECT type, High_Point, Low_Point, weight FROM {self.important_dps_table_name} WHERE id = %s", (The_dp_id,))
+        self.cursor.execute(f"SELECT type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction FROM {self.important_dps_table_name} WHERE id = %s", (The_dp_id,))
         result = self.cursor.fetchone()
         High_Point = self._get_flag_point_Function(result[1])
         Low_Point = self._get_flag_point_Function(result[2])
-        return DP_Parameteres_Class(type=result[0], High=High_Point, Low=Low_Point, weight=result[3])
+        return DP_Parameteres_Class(type=result[0], High=High_Point, Low=Low_Point, weight=result[3], first_valid_trade_time=result[4], trade_direction=result[5])
     
     def set_important_dp_weight_Function(self, The_dp_id: int, The_weight: int):
         """Set the weight column for the given important DP ID."""
@@ -170,3 +172,35 @@ class Database_Class:
             (The_weight,The_dp_id,)
         )
         self.db.commit()  # Ensure changes are saved
+    
+    def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, int]]:
+        # Get all important DPs in one query
+        self.cursor.execute(f"SELECT id, type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction FROM {self.important_dps_table_name} WHERE weight > 0")
+        dp_results = self.cursor.fetchall()
+        
+        # Get all flag points in one query
+        flag_ids = [row[2] for row in dp_results if not pd.isna(row[2])] + [row[3] for row in dp_results if not pd.isna(row[3])]
+        if flag_ids:
+            self.cursor.execute(f"SELECT id, price, time FROM {self.flag_points_table_name} WHERE id IN ({','.join(['%s'] * len(flag_ids))})", flag_ids)
+            flag_points = {row[0]: FlagPoint_Class(price=row[1], time=row[2]) for row in self.cursor.fetchall()}
+        else:
+            flag_points = {}
+        
+        # Build DP objects
+        dps = []
+        for row in dp_results:
+            dp_id, dp_type, high_id, low_id, weight, first_valid_time, trade_direction = row
+            high_point = flag_points.get(high_id) if not pd.isna(high_id) else None
+            low_point = flag_points.get(low_id) if not pd.isna(low_id) else None
+            dp = DP_Parameteres_Class(
+                type=dp_type, 
+                High=high_point, 
+                Low=low_point, 
+                weight=weight, 
+                first_valid_trade_time=first_valid_time, 
+                trade_direction=trade_direction
+            )
+            dps.append((dp, dp_id))
+        
+        return dps
+

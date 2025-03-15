@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from functions.logger import print_and_logging_Function
 import parameters
+from classes.Database import Database_Class
 
 # Load JSON config file
 with open("./config.json", "r") as file:
@@ -31,11 +32,7 @@ class Metatrader_Module_Class:
             "W1": self.mt.TIMEFRAME_W1,
             "MN1": self.mt.TIMEFRAME_MN1,
         }
-
     
-
-    async def Update_Flags_Function(self):
-        print_and_logging_Function("info", f"you can see mt is transfered successfuly {self.mt}", "description")
     ## for buying price = mt.symbol_info_tick(ticker).ask
     ## for selling price = mt.symbol_info_tick(ticker).bid
     ## order_type= mt.ORDER_TYPE_SELL / BUY

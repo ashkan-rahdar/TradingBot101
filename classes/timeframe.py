@@ -46,88 +46,77 @@ class Timeframe_Class:
 
     async def validate_DPs_Function(self):
         try:
-            # Get the total number of rows in the table
-            self.MySQL_DataBase.cursor.execute(f"SELECT COUNT(*) FROM {self.MySQL_DataBase.flags_table_name}")
-            row_count = self.MySQL_DataBase.cursor.fetchone()[0]  # Fetch the count value
-
+            # Initialize list to store DPs that need to be updated
+            self.dps_to_update = []
+            
+            valid_DPs = self.MySQL_DataBase._get_tradeable_DPs_Function()
+            
+            # Pre-calculate these values once
+            self.DataSet['time'] = self.DataSet['time'].astype('datetime64[ns]')
+            
+            tasks = []
+            for The_valid_DP, index_of_DP in valid_DPs:
+                task = self.Each_DP_validation_Function(The_valid_DP, index_of_DP)
+                tasks.append(task)
+            
+            await asyncio.gather(*tasks)  # Await all tasks
+            
+            # Batch update the database
+            if self.dps_to_update:
+                self._batch_update_dp_weights()
+                
         except Exception as e:
-            print_and_logging_Function("error", f"Error retrieving row count: {e}", "title")
-            return
-
-        tasks = []
-        # Iterate through all rows from 1 to row_count
-        for flag_id in range(1, row_count + 1):
-            task = self.Each_Flag_fetch_data_Function(flag_id)  # No need to use create_task()
-            tasks.append(task)
-
-        await asyncio.gather(*tasks)  # Await all tasks
-
-    async def Each_Flag_fetch_data_Function(self, flag_id):
-
-        def Is_DP_used_Function(The_DP: DP_Parameteres_Class, 
-                                End_of_flag: pd.Timestamp, 
-                                type_of_flag: typing.Literal['Bearish','Bullish'], 
-                                DP_id : int) -> bool:
-            if The_DP is None:
-                return False
-            
-            time_series = self.DataSet['time'].to_numpy(dtype='datetime64[ns]')
-            index = bisect.bisect_right(time_series, np.datetime64(End_of_flag)) # Binary search for the first index where time > End_of_flag
-            
-            if index < len(time_series):
-                First_seaching_index = index
-            else:
-                raise Exception(f"No Valid Time entered in a {DP_id} DP")
-            
-            if type_of_flag == "Bearish":
-                high_series = self.DataSet['high'].values  # Convert to NumPy array for fast lookup
-                for i in range(First_seaching_index, len(high_series)):  # Scan from found index onward
-                    if high_series[i] >= The_DP.Low.price:
-                        return True
-
-                return False
-                        
-            elif type_of_flag == "Bullish":
-                low_series = self.DataSet['low'].values  # Convert to NumPy array for fast lookup
-                for i in range(First_seaching_index, len(low_series)):  # Scan from found index onward
-                    if low_series[i] <= The_DP.High.price:
-                        return True
-
-                return False
-            
-            else:
-                return True
-
+            print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
+        
+    def _batch_update_dp_weights(self):
+        """Batch update all DP weights in a single database transaction"""
         try:
-            # ✅ Create a NEW cursor for this async function
-            db_cursor = self.MySQL_DataBase.db.cursor()
-
-            # Fetch the values of "type", "FTC", "EL", and "MPL" for the current row
-            db_cursor.execute(
-                f"SELECT type, Ending_time, FTC, EL, MPL FROM {self.MySQL_DataBase.flags_table_name} WHERE id = %s",
-                (flag_id,)
+            # Prepare the SQL query
+            placeholders = ",".join(["%s"] * len(self.dps_to_update))
+            values = [(weight, dp_id) for dp_id, weight in self.dps_to_update]
+            
+            # Execute the update
+            self.MySQL_DataBase.cursor.executemany(
+                f"UPDATE {self.MySQL_DataBase.important_dps_table_name} SET weight = %s WHERE id = %s", 
+                values
             )
-            result = db_cursor.fetchone()  # Fetch one row
-
-            if result:
-                type_of_flag, End_time_of_flag, FTC_id_of_flag, EL_id_of_flag, MPL_id_of_flag = result  # Unpack values
-
-                FTC_of_flag = self.MySQL_DataBase._get_important_dp_Function(FTC_id_of_flag)
-                EL_of_flag = self.MySQL_DataBase._get_important_dp_Function(EL_id_of_flag)
-                MPL_of_flag = self.MySQL_DataBase._get_important_dp_Function(MPL_id_of_flag)
-
-                if Is_DP_used_Function(FTC_of_flag, End_time_of_flag, type_of_flag, FTC_id_of_flag):
-                    self.MySQL_DataBase.set_important_dp_weight_Function(FTC_id_of_flag, 0)
-                if Is_DP_used_Function(EL_of_flag, End_time_of_flag, type_of_flag, EL_id_of_flag):
-                    self.MySQL_DataBase.set_important_dp_weight_Function(EL_id_of_flag, 0)
-                if Is_DP_used_Function(MPL_of_flag, End_time_of_flag, type_of_flag, MPL_id_of_flag):
-                    self.MySQL_DataBase.set_important_dp_weight_Function(MPL_id_of_flag, 0)
-            else:
-                print_and_logging_Function("error", f"No valid result fetched from the {flag_id} flag", "title")
-
-            db_cursor.close()  # ✅ Close cursor after use
-
+            self.MySQL_DataBase.db.commit()
         except Exception as e:
-            print_and_logging_Function("error", f"Error retrieving data for row {flag_id}: {e}", "title")
+            self.MySQL_DataBase.db.rollback()
+            print_and_logging_Function("error", f"Error in batch updating DP weights: {e}", "title")
+            
+    async def Each_DP_validation_Function(self, aDP: DP_Parameteres_Class, The_index_DP: int):
+        try:
+            # Pre-calculate these values once outside the loop
+            time_series = self.DataSet['time'].to_numpy(dtype='datetime64[ns]')
+            high_series = self.DataSet['high'].values
+            low_series = self.DataSet['low'].values
+            
+            if aDP is None or aDP.weight == 0:
+                return
+            
+            index = bisect.bisect_right(time_series, np.datetime64(aDP.first_valid_trade_time))
+            
+            if index >= len(time_series):
+                raise Exception(f"No Valid Time entered in a {The_index_DP} DP")
+            
+            # Use NumPy's efficient array operations instead of loops
+            if aDP.trade_direction == "Bearish":
+                # Check if any high price is >= the DP's Low price
+                if np.any(high_series[index:] >= aDP.Low.price):
+                    self.dps_to_update.append((The_index_DP, 0))
+                    
+            elif aDP.trade_direction == "Bullish":
+                # Check if any low price is <= the DP's High price
+                if np.any(low_series[index:] <= aDP.High.price):
+                    self.dps_to_update.append((The_index_DP, 0))
+        
+        except Exception as e:
+            raise Exception(f"validating the {The_index_DP} DP: {e}")
+    
+    async def Update_Positions_Function(self):
+        valid_DPs = self.MySQL_DataBase._get_tradeable_DPs_Function()
+        for The_valid_DP, index_of_DP in valid_DPs:
+            print(The_valid_DP)
 
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

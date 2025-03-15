@@ -7,6 +7,8 @@ import signal
 import sys
 import os
 import json
+import time
+import cProfile
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -57,36 +59,49 @@ def emergency_handler_Function(sig, frame):
     # sys.exit(0)
 
 async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
-    # Step 1: Fetch Data
-    if parameters.The_emergency_flag:
-        return
-    
     try:
-        The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
-    except RuntimeError as The_error:
-        print_and_logging_Function("critical", f"Critical failure in fetching {The_timeframe} data: {The_error}", "title")
-        parameters.The_emergency_flag = True
-        The_emergency_event.set()
-        The_Collected_DataSet = pd.DataFrame()
-    
-    if parameters.The_emergency_flag:
-        return
-    
-    CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
+        start_time = time.time()
+        profiler = cProfile.Profile()
+        profiler.enable()
+        
+        # Step 1: Fetch Data
+        if parameters.The_emergency_flag:
+            return
+        
+        try:
+            The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
+        except RuntimeError as The_error:
+            print_and_logging_Function("critical", f"Critical failure in fetching {The_timeframe} data: {The_error}", "title")
+            parameters.The_emergency_flag = True
+            The_emergency_event.set()
+            The_Collected_DataSet = pd.DataFrame()
+        
+        if parameters.The_emergency_flag:
+            return
+        
+        CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
 
-    # Step 2: Detect Flags
-    await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
+        # Step 2: Detect Flags
+        await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
 
-    # step 3: Validate DPs and Flags
-    await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
-    
-    # step 4: Development
-    # await run_with_retries_Function(CTimeFrames[The_index].development, CMetatrader_Module.mt.account_info())
+        # step 3: Validate DPs and Flags
+        await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
+        
+        # step 4: Development
+        # await run_with_retries_Function(CTimeFrames[The_index].development, CMetatrader_Module.mt.account_info())
 
-    try:
-        await run_with_retries_Function(CMetatrader_Module.Update_Flags_Function)
-    except RuntimeError as The_error:
-        print_and_logging_Function("critical", f"Critical failure in updating Positions: {The_error}", "title")
+        try:
+            await run_with_retries_Function(CTimeFrames[The_index].Update_Positions_Function)
+        except RuntimeError as The_error:
+            print_and_logging_Function("critical", f"Critical failure in updating Positions: {The_error}", "title")
+
+
+        profiler.disable()
+        elapsed = time.time() - start_time
+        print_and_logging_Function("info",f"For Each loop of Each timeframe: {elapsed:.2f} seconds", "title")
+        # profiler.print_stats(sort='cumtime')
+    except Exception as e:
+        print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
 
 async def main():
     while not parameters.The_emergency_flag:

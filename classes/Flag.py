@@ -42,7 +42,7 @@ class Flag_Class:
                                             flag_type = self.flag_type,
                                             start_of_index = The_high.index if The_flag_type == "Bullish" else The_low.index)
         self.FTC.type = "FTC"
-        self.FTC.start_index = The_start_FTC
+        self.FTC.first_valid_trade_time = The_start_FTC
         
         if The_flag_type == "Bullish":
             EL_direction = "Bearish"
@@ -70,14 +70,9 @@ class Flag_Class:
         else:
             self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
         self.MPL.type = "MPL"
-        # self.validate_DP(
-        #     Important_DP=self.FTC,
-        #     dataset= (data_in_flag.iloc[low.index - start_index + 1:] if flag_type=="Bullish" 
-        #               else data_in_flag.iloc[high.index - start_index + 1:]))
-        # self.validate_DP(
-        #     Important_DP=self.EL,
-        #     dataset= (data_in_flag.iloc[low.index - start_index + 1:] if flag_type=="Bullish" 
-        #               else data_in_flag.iloc[high.index - start_index + 1:]))
+
+        self.FTC.trade_direction = self.EL.trade_direction = self.MPL.trade_direction = self.flag_type
+        self.FTC.first_valid_trade_time = self.EL.first_valid_trade_time = self.MPL.first_valid_trade_time = self.End_time
         
     def DP_Detector_Function(self, 
                             dataset: pd.DataFrame,            
