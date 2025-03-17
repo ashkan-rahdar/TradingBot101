@@ -3,6 +3,7 @@ import pandas as pd
 import sys
 import os
 from colorama import Fore,Style
+import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,9 +14,12 @@ from classes.DP_Parameteres import DP_Parameteres_Class
 
 class Database_Class:
     def __init__(self, The_timeframe: str):
+
         self.flag_points_table_name = f"Flag_Points_{The_timeframe}"
         self.important_dps_table_name = f"Important_DPs_{The_timeframe}"
         self.flags_table_name = f"Flags_{The_timeframe}"
+        self.Positions_table_name = f"Positions_{The_timeframe}"
+
         self.TimeFrame = The_timeframe
         print_and_logging_Function("info", f"The DataBase of {The_timeframe} is initializing...", "description")
         try:
@@ -28,6 +32,7 @@ class Database_Class:
             )
             self.cursor = self.db.cursor()
             self._initialize_tables_Function()
+            self.Traded_DP_Set = set()
         except Exception as e:
             print_and_logging_Function("error", f"An error occured in initialization of DB connection: {e}", "title")
 
@@ -71,6 +76,21 @@ class Database_Class:
                 FOREIGN KEY (FTC) REFERENCES {self.important_dps_table_name}(id) ON DELETE SET NULL,
                 FOREIGN KEY (EL) REFERENCES {self.important_dps_table_name}(id) ON DELETE SET NULL,
                 FOREIGN KEY (MPL) REFERENCES {self.important_dps_table_name}(id) ON DELETE SET NULL
+            )
+            """,
+            f"""
+            CREATE TABLE IF NOT EXISTS {self.Positions_table_name} (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                Traded_DP INT,
+                Order_type ENUM('Buy', 'Sell', 'Buy Limit', 'Sell Limit') NOT NULL,
+                Price FLOAT NOT NULL,
+                SL FLOAT NOT NULL,
+                TP FLOAT NOT NULL,
+                Last_modified_time DATETIME NOT NULL,
+                Vol FLOAT Not Null,
+                Order_ID INT Not Null,
+                Result INT NOT Null DEFAULT 0,
+                FOREIGN KEY (Traded_DP) REFERENCES {self.important_dps_table_name}(id) ON DELETE SET NULL
             )
             """
         ]
@@ -138,40 +158,22 @@ class Database_Class:
         self.db.commit()
         return self.cursor.lastrowid
 
-    def load_data_Function(self) -> pd.DataFrame:
-        self.cursor.execute(f"SELECT * FROM {self.flags_table_name}")
-        flags = self.cursor.fetchall()
-        columns = ["id", "Type", "High", "Low", "Starting_time", "Ending_time", "FTC", "EL", "MPL", "Weight"]
-        df = pd.DataFrame(flags, columns=columns)
-        df['High'] = df['High'].apply(self._get_flag_point_Function)
-        df['Low'] = df['Low'].apply(self._get_flag_point_Function)
-        df['FTC'] = df['FTC'].apply(self._get_important_dp_Function)
-        df['EL'] = df['EL'].apply(self._get_important_dp_Function)
-        df['MPL'] = df['MPL'].apply(self._get_important_dp_Function)
-        return df
-
-    def _get_flag_point_Function(self, The_flag_id: int) -> FlagPoint_Class:
-        if pd.isna(The_flag_id): return None
-        self.cursor.execute(f"SELECT price, time FROM {self.flag_points_table_name} WHERE id = %s", (The_flag_id,))
-        result = self.cursor.fetchone()
-        return FlagPoint_Class(price=result[0], time=result[1])
-
-    def _get_important_dp_Function(self, The_dp_id: int) -> DP_Parameteres_Class:
-        if pd.isna(The_dp_id): return None
-        self.cursor.execute(f"SELECT type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction FROM {self.important_dps_table_name} WHERE id = %s", (The_dp_id,))
-        result = self.cursor.fetchone()
-        High_Point = self._get_flag_point_Function(result[1])
-        Low_Point = self._get_flag_point_Function(result[2])
-        return DP_Parameteres_Class(type=result[0], High=High_Point, Low=Low_Point, weight=result[3], first_valid_trade_time=result[4], trade_direction=result[5])
-    
-    def set_important_dp_weight_Function(self, The_dp_id: int, The_weight: int):
-        """Set the weight column for the given important DP ID."""
-        if pd.isna(The_dp_id): return
-        self.cursor.execute(
-            f"UPDATE {self.important_dps_table_name} SET weight = %s WHERE id = %s", 
-            (The_weight,The_dp_id,)
-        )
-        self.db.commit()  # Ensure changes are saved
+    def _update_dp_weights_Function(self, dps_to_update: list):
+        """Batch update all DP weights in a single database transaction"""
+        try:
+            # Prepare the SQL query
+            placeholders = ",".join(["%s"] * len(dps_to_update))
+            values = [(weight, dp_id) for dp_id, weight in dps_to_update]
+            
+            # Execute the update
+            self.cursor.executemany(
+                f"UPDATE {self.important_dps_table_name} SET weight = %s WHERE id = %s", 
+                values
+            )
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            print_and_logging_Function("error", f"Error in batch updating DP weights: {e}", "title")
     
     def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, int]]:
         # Get all important DPs in one query
@@ -203,4 +205,34 @@ class Database_Class:
             dps.append((dp, dp_id))
         
         return dps
+    
+    def _insert_position(self, traded_dp_id: int, mt_order_type: str, price: float, sl: float, tp: float, 
+                        Last_modified_time: datetime, vol: int, order_id: int, 
+                        order_type_mapping: dict[int, str] = {0: "Buy", 1: "Sell", 2: "Buy Limit", 3: "Sell Limit"}):
+        # Validate input
+        if traded_dp_id is None or price is None or sl is None or tp is None or Last_modified_time is None or vol is None or order_id is None:
+            raise Exception("Invalid input: traded_dp_id, price, sl, tp, Last_modified_time, vol, order_id")
+            return
+        
+        order_type = order_type_mapping.get(mt_order_type,None)
 
+        if order_type not in ['Buy', 'Sell', 'Buy Limit', 'Sell Limit']:
+            raise Exception("Invalid Order Type")
+            return
+
+        # Format time to ensure consistent representation
+        formatted_time = Last_modified_time.strftime('%Y-%m-%d %H:%M:%S')
+
+        # Insert the position into the database
+        self.cursor.execute(
+            f"""INSERT INTO {self.Positions_table_name} 
+                (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (traded_dp_id, order_type, price, sl, tp, formatted_time, vol, order_id)
+        )
+
+        # Commit transaction
+        self.db.commit()
+        
+        self.Traded_DP_Set.add(traded_dp_id)
+        return

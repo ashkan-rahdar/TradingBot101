@@ -65,7 +65,7 @@ class Flag_Class:
             self.MPL = DP_Parameteres_Class(self.high, self.EL.High)
             self.MPL.weight = 1
         elif The_flag_type == "Bearish":
-            self.MPL = DP_Parameteres_Class(self.low, self.EL.Low)
+            self.MPL = DP_Parameteres_Class(self.EL.Low, self.low)
             self.MPL.weight = 1
         else:
             self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
