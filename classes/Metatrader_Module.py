@@ -40,12 +40,6 @@ class Metatrader_Module_Class:
             "Buy Limit": self.mt.ORDER_TYPE_BUY_LIMIT,
             "Sell Limit": self.mt.ORDER_TYPE_SELL_LIMIT
         }
-        # self.reverse_order_type_mapping = {
-        #     self.mt.ORDER_TYPE_SELL: "Buy",
-        #     self.mt.ORDER_TYPE_SELL: "Sell",
-        #     self.mt.ORDER_TYPE_BUY_LIMIT: "Buy Limit",
-        #     self.mt.ORDER_TYPE_SELL_LIMIT: "Sell Limit"
-        # }
         self.reverse_order_type_mapping = {value: key for key, value in self.order_type_mapping.items()}
 
     def Open_position_Function(self, 

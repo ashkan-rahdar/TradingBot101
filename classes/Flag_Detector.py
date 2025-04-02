@@ -15,7 +15,7 @@ from classes.Database import Database_Class
 class FlagDetector_Class:
     """Detects Bullish and Bearish flags from a dataset."""
     def __init__(self, The_timeframe:str, The_DataBase: Database_Class):
-        self.DataBase = The_DataBase
+        self.CDataBase = The_DataBase
         self.DB_name_flag_points_table = f"Flag_Points_{The_timeframe}"
         self.DB_name_flags_table = f"Flags_{The_timeframe}"
         self.TimeFrame = The_timeframe
@@ -84,7 +84,8 @@ class FlagDetector_Class:
             The_end_index= end_of_flag_index,
             The_start_FTC= end_of_flag_index)
         
-        The_local_tasks.append(asyncio.create_task(self.add_flag_Function(flag)))
+        # The_local_tasks.append(asyncio.create_task(self.CDataBase.add_flag_Function(flag,self.DB_name_flags_table)))
+        self.Detected_Flags.append(flag)
 
     async def detect_bearish_flags_Function(self, The_dataset: pd.DataFrame):
         """Detect Bearish Flags."""
@@ -138,35 +139,22 @@ class FlagDetector_Class:
             The_start_FTC= end_of_flag_index
         )
 
-        The_local_tasks.append(asyncio.create_task(self.add_flag_Function(flag)))
+        # The_local_tasks.append(asyncio.create_task(self.CDataBase.add_flag_Function(flag,self.DB_name_flags_table)))
+        self.Detected_Flags.append(flag)
             
     async def run_detection_Function(self, The_dataset: pd.DataFrame):
         """Run flag detection for both Bullish and Bearish flags."""
         tasks = []
         try:
-            self.detected_flags = 0
+            self.CDataBase.detected_flags = 0
+            self.Detected_Flags : list[Flag_Class] = []
             self.detect_local_extremes_Function(The_dataset)
             tasks.append(asyncio.create_task(self.detect_bullish_flags_Function(The_dataset)))
             tasks.append(asyncio.create_task(self.detect_bearish_flags_Function(The_dataset)))
+            tasks.append(asyncio.create_task(self.CDataBase.save_flags_Function(self.Detected_Flags)))
             await asyncio.gather(*tasks)
             print_and_logging_Function("info", f"Flag Detection of {self.TimeFrame} completed", "title")
-            print_and_logging_Function("info", f"{self.detected_flags} New Flags detected", "description")
+            print_and_logging_Function("info", f"{self.CDataBase.detected_flags} New Flags detected", "description")
         except Exception as e:
             print_and_logging_Function("error", f"An error occurred during detection: {e}", "title")
             raise
-
-    async def add_flag_Function(self, The_flag: Flag_Class):
-        try:
-            # Check if flag already exists in the database
-            self.DataBase.cursor.execute(f"SELECT COUNT(*) FROM {self.DB_name_flags_table} WHERE Unique_Point = %s", (The_flag.Unique_point,))
-            exists = self.DataBase.cursor.fetchone()[0] > 0
-
-            if exists:
-                return  # Don't insert duplicate flags
-
-            # Insert new flag into the database
-            await self.DataBase.save_data_Function(The_flag)  
-            self.detected_flags += 1
-
-        except Exception as e:
-            print_and_logging_Function("error", f"Error in adding flag {The_flag.Unique_point} to DB: {e}", "title")

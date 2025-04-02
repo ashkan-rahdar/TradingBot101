@@ -51,7 +51,7 @@ class Timeframe_Class:
             self.dps_to_update : list[tuple[int, int]] = []
             self.Tradeable_DPs: list[tuple[DP_Parameteres_Class, int]] = []
             
-            valid_DPs = self.CMySQL_DataBase._get_tradeable_DPs_Function()
+            valid_DPs = await self.CMySQL_DataBase._get_tradeable_DPs_Function()
             
             # Pre-calculate these values once
             self.DataSet['time'] = self.DataSet['time'].astype('datetime64[ns]')
@@ -65,7 +65,10 @@ class Timeframe_Class:
             
             # Batch update the database
             if self.dps_to_update:
-                self.CMySQL_DataBase._update_dp_weights_Function(self.dps_to_update)
+                try:
+                    await self.CMySQL_DataBase._update_dp_weights_Function(self.dps_to_update)
+                except Exception as e:
+                    raise e
                 
         except Exception as e:
             print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
@@ -116,7 +119,7 @@ class Timeframe_Class:
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                 else:
                     try:    
-                        Position_row_id = self.CMySQL_DataBase._insert_position(traded_dp_id=The_index, 
+                        Position_row_id = await self.CMySQL_DataBase._insert_position(traded_dp_id=The_index, 
                                                             mt_order_type=result.request.type,
                                                             price= result.request.price, 
                                                             sl= result.request.sl,
