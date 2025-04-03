@@ -61,8 +61,7 @@ class Database_Class:
             """,
             f"""
             CREATE TABLE IF NOT EXISTS {self.flags_table_name} (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                Unique_Point DATETIME NOT NULL,
+                Unique_Point DATETIME NOT NULL PRIMARY KEY,
                 type ENUM('Bullish', 'Bearish', 'Undefined') NOT NULL,
                 High VARCHAR(255) NOT NULL,
                 Low VARCHAR(255) NOT NULL,
@@ -185,6 +184,11 @@ class Database_Class:
                             flag_point_values.append((
                                 flag.MPL.Low.ID_generator_Function(), flag.MPL.Low.price, flag.MPL.Low.time.strftime('%Y-%m-%d %H:%M:%S')
                             ))
+
+                    await cursor.execute(f"SELECT COUNT(*) FROM {self.flags_table_name}")
+                    before_insert_count = await cursor.fetchone()
+                    before_insert_count = before_insert_count[0] 
+
                     await cursor.executemany(
                         f"""INSERT INTO {self.flags_table_name} 
                             (Unique_Point, type, High, Low, Starting_time, Ending_time, FTC, EL, MPL, weight)
@@ -193,6 +197,11 @@ class Database_Class:
                         flag_values
                     )
                     await conn.commit()
+                    
+                    await cursor.execute(f"SELECT COUNT(*) FROM {self.flags_table_name}")
+                    after_insert_count = await cursor.fetchone()
+                    after_insert_count = after_insert_count[0]
+                    self.detected_flags = after_insert_count - before_insert_count
 
                     await cursor.executemany(
                         f"""INSERT INTO {self.important_dps_table_name} 
