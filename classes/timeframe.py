@@ -73,7 +73,7 @@ class Timeframe_Class:
         except Exception as e:
             print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
             
-    async def Each_DP_validation_Function(self, aDP: DP_Parameteres_Class, The_index_DP: int):
+    async def Each_DP_validation_Function(self, aDP: DP_Parameteres_Class, The_index_DP: str):
         try:
             # Pre-calculate these values once outside the loop
             time_series = self.DataSet['time'].to_numpy(dtype='datetime64[ns]')
@@ -86,7 +86,9 @@ class Timeframe_Class:
             index = bisect.bisect_right(time_series, np.datetime64(aDP.first_valid_trade_time))
             
             if index >= len(time_series):
-                raise Exception(f"No Valid Time entered in a {The_index_DP} DP")
+                # raise Exception(f"No Valid Time entered in a {The_index_DP} DP")
+                self.Tradeable_DPs.append((aDP, The_index_DP))
+                return
             
             # Use NumPy's efficient array operations instead of loops
             if aDP.trade_direction == "Bearish":
