@@ -109,31 +109,43 @@ class Timeframe_Class:
             raise Exception(f"validating the {The_index_DP} DP: {e}")
     
     async def Update_Positions_Function(self):
+        new_opened_positions = 0
+        inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int]] = []
+
         for aDP, The_index in self.Tradeable_DPs:
             if not The_index in self.CMySQL_DataBase.Traded_DP_Set:
-                result = CMetatrader_Module.Open_position_Function(order_type= "Buy Limit" if aDP.trade_direction == "Bullish" else "Sell Limit",
-                                                        vol= 0.01,
-                                                        price= aDP.High.price if aDP.trade_direction == "Bullish" else aDP.Low.price,
-                                                        sl= aDP.Low.price if aDP.trade_direction == "Bullish" else aDP.High.price,
-                                                        tp= aDP.High.price + 2*(aDP.High.price-aDP.Low.price) if aDP.trade_direction == "Bullish" else aDP.Low.price - 2*(aDP.High.price - aDP.Low.price),
-                                                        )
+                result = CMetatrader_Module.Open_position_Function(
+                    order_type="Buy Limit" if aDP.trade_direction == "Bullish" else "Sell Limit",
+                    vol=0.01,
+                    price=aDP.High.price if aDP.trade_direction == "Bullish" else aDP.Low.price,
+                    sl=aDP.Low.price if aDP.trade_direction == "Bullish" else aDP.High.price,
+                    tp=aDP.High.price + 2 * (aDP.High.price - aDP.Low.price) if aDP.trade_direction == "Bullish" else aDP.Low.price - 2 * (aDP.High.price - aDP.Low.price),
+                )
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE:
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                 else:
-                    try:    
-                        Position_row_id = await self.CMySQL_DataBase._insert_position(traded_dp_id=The_index, 
-                                                            mt_order_type=result.request.type,
-                                                            price= result.request.price, 
-                                                            sl= result.request.sl,
-                                                            tp= result.request.tp,
-                                                            Last_modified_time= datetime.datetime.now(),
-                                                            vol= result.request.volume,
-                                                            order_id= result.order, 
-                                                            order_type_mapping= CMetatrader_Module.reverse_order_type_mapping)
-                        # CMetatrader_Module.cancel_order(order_number= result.order)
+                    # Get the correct order type from the mapping
+                    order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type)
 
-                        print_and_logging_Function("info", f"New position submitted which saved in {Position_row_id} row of DB", "title")
-                    except Exception as e:
-                        print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
+                    inserting_positions_DB.append((
+                        The_index,  # traded_dp_id
+                        order_type,  # order_type
+                        result.request.price,  # price
+                        result.request.sl,  # sl
+                        result.request.tp,  # tp
+                        datetime.datetime.now(),  # Last_modified_time
+                        result.request.volume,  # vol
+                        result.order  # order_id
+                    ))
+
+                    new_opened_positions += 1
+                    print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
+        
+        try:
+            await self.CMySQL_DataBase._insert_positions_batch(inserting_positions_DB)
+            if new_opened_positions:
+                print_and_logging_Function("info", f"{new_opened_positions} New positions opened and inserted in DB", "title")
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
 
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

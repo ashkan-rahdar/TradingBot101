@@ -233,8 +233,7 @@ class Database_Class:
             print_and_logging_Function("error", f"Error in batch updating DP weights: {e}", "title")
             await conn.rollback()  # Rollback if there's an error
 
-    async def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, int]]:
-        # Get all important DPs in one query
+    async def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
         try:
             async with self.db_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
@@ -257,10 +256,20 @@ class Database_Class:
                         # Create a dictionary for fast lookup
                         flag_points = {str(row[0]): FlagPoint_Class(price=row[1], time=row[2]) for row in await cursor.fetchall()}
 
-                    # Build DP objects and return them
+                    # Get existing traded dp ids to avoid duplication
+                    existing_dp_ids = set()
+                    await cursor.execute(f"""
+                        SELECT DISTINCT Traded_DP FROM {self.Positions_table_name}
+                    """)
+                    existing_dp_ids = {row[0] for row in await cursor.fetchall()}
+
+                    # Build DP objects and return them, only for DPs that are not already in the Positions table
                     dps = []
                     for row in dp_results:
                         dp_id, dp_type, high_id, low_id, weight, first_valid_time, trade_direction = row
+                        if dp_id in existing_dp_ids:
+                            continue  # Skip DP if it already exists in the Positions table
+                        
                         high_point = flag_points.get(str(high_id)) if high_id else None
                         low_point = flag_points.get(str(low_id)) if low_id else None
                         dp = DP_Parameteres_Class(
@@ -272,40 +281,38 @@ class Database_Class:
                             trade_direction=trade_direction
                         )
                         dps.append((dp, dp_id))
+
                     return dps
         except Exception as e:
             print_and_logging_Function("error", f"Error in fetching tradeable DPs: {e}", "title")
             return []
-    
-    async def _insert_position(self, traded_dp_id: int, mt_order_type: str, price: float, sl: float, tp: float, 
-                            Last_modified_time: datetime, vol: int, order_id: int, 
-                            order_type_mapping: dict[int, str] = {0: "Buy", 1: "Sell", 2: "Buy Limit", 3: "Sell Limit"}):
-        # Validate input
-        if not all([traded_dp_id, price, sl, tp, Last_modified_time, vol, order_id]):
-            raise Exception("Invalid input: traded_dp_id, price, sl, tp, Last_modified_time, vol, order_id")
-        
-        order_type = order_type_mapping.get(mt_order_type, None)
-        if order_type not in ['Buy', 'Sell', 'Buy Limit', 'Sell Limit']:
-            raise Exception("Invalid Order Type")
+  
+    async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int]]):
+        """
+        Insert multiple positions in a batch using executemany.
+        :param positions: List of tuples containing data for each position
+        """
+        # Validate input (we assume positions are already validated)
+        if not positions:
+            return
 
-        # Format time to ensure consistent representation
-        formatted_time = Last_modified_time.strftime('%Y-%m-%d %H:%M:%S')
+        # Prepare the SQL query
+        query = f"""
+            INSERT INTO {self.Positions_table_name} 
+            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE Traded_DP = Traded_DP
+        """
 
-        # Insert the position into the database
+        # Perform the batch insert
         try:
             async with self.db_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    await cursor.execute(
-                        f"""INSERT INTO {self.Positions_table_name} 
-                            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (traded_dp_id, order_type, price, sl, tp, formatted_time, vol, order_id)
-                    )
+                    # Execute the batch insert using executemany
+                    await cursor.executemany(query, positions)
 
                     # Commit the transaction
                     await conn.commit()
-                    self.Traded_DP_Set.add(traded_dp_id)
-                    return cursor.lastrowid
+                    return
         except Exception as e:
-            print_and_logging_Function("error", f"Error inserting position: {e}", "title")
-            return None
+            raise Exception(f"Error inserting batch positions: {e}")
