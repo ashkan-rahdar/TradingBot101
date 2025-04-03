@@ -37,8 +37,8 @@ class Flag_Class:
         self.Unique_point = The_high.time if self.flag_type == "Bullish" else The_low.time
 
         self.FTC = self.DP_Detector_Function(
-                                            dataset = (The_data_in_flag.iloc[The_high.index - The_start_index:The_low.index - The_start_index] if The_flag_type=="Bullish" 
-                                                    else The_data_in_flag.iloc[The_low.index - The_start_index:The_high.index - The_start_index]),
+                                            dataset = (The_data_in_flag.iloc[The_high.index - The_start_index : The_low.index - The_start_index + 1] if The_flag_type=="Bullish" 
+                                                    else The_data_in_flag.iloc[The_low.index - The_start_index : The_high.index - The_start_index + 1]),
                                             flag_type = self.flag_type,
                                             start_of_index = The_high.index if The_flag_type == "Bullish" else The_low.index)
         self.FTC.type = "FTC"
@@ -52,8 +52,8 @@ class Flag_Class:
             EL_direction = "Undefined"
 
         self.EL = self.DP_Detector_Function(
-                                            dataset= (The_data_in_flag.iloc[:The_high.index - The_start_index] if The_flag_type=="Bullish" 
-                                            else The_data_in_flag.iloc[:The_low.index - The_start_index]),
+                                            dataset= (The_data_in_flag.iloc[:The_high.index - The_start_index + 1] if The_flag_type=="Bullish" 
+                                            else The_data_in_flag.iloc[:The_low.index - The_start_index + 1]),
                                             flag_type = EL_direction,
                                             start_of_index= self.Start_index)
         self.EL.type = "EL"
@@ -78,16 +78,14 @@ class Flag_Class:
                             dataset: pd.DataFrame,            
                             flag_type: typing.Literal["Bullish", "Bearish", "Undefined"],   
                             start_of_index: int) -> DP_Parameteres_Class:
-        
-        highs = dataset['high'].to_numpy()
-        lows = dataset['low'].to_numpy()
-        local_Lows_index = np.where(dataset['is_local_min'].to_numpy())[0]
-        local_Highs_index = np.where(dataset['is_local_max'].to_numpy())[0]
         time = dataset['time']
 
-        time = dataset['time']
         DP = DP_Parameteres_Class(FlagPoint_Class(None, None,None), FlagPoint_Class(None, None,None))
         if flag_type == "Bullish":
+            highs = dataset['high'].to_numpy()
+            dataprime = dataset.iloc[:-1]
+            lows = dataprime['low'].to_numpy()
+            local_Lows_index = np.where(dataprime['is_local_min'].to_numpy())[0] 
             if len(local_Lows_index) == 0:
                 DP.weight = 0
                 return DP
@@ -109,9 +107,15 @@ class Flag_Class:
             else:
                 DP.weight = 0
         elif flag_type == "Bearish":
+            lows = dataset['low'].to_numpy()
+            dataprime = dataset.iloc[:-1]
+            highs = dataprime['high'].to_numpy()
+            local_Highs_index = np.where(dataprime['is_local_max'].to_numpy())[0] 
+
             if len(local_Highs_index) == 0:
                 DP.weight = 0
                 return DP
+            
             local_highs = highs[local_Highs_index]
             high_of_DP = local_highs.max()
             high_of_DP_index = local_Highs_index[np.where(local_highs == high_of_DP)[0][-1]]
