@@ -55,7 +55,7 @@ async def Reaction_to_DP(DP: DP_Parameteres_Class,
         DP.Status = "Used"
 
         reaction *= DP.weight
-    if reaction != None:
+    if reaction is not None:
         return reaction
     else:
         return -2

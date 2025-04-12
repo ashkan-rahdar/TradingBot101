@@ -1,9 +1,7 @@
-import mysql.connector
+import mysql.connector  # noqa: F401
 from mysql.connector import pooling
-import pandas as pd
 import sys
 import os
-from colorama import Fore,Style
 import datetime
 import aiomysql
 
@@ -15,6 +13,29 @@ from classes.FlagPoint import FlagPoint_Class
 from classes.DP_Parameteres import DP_Parameteres_Class
 
 class Database_Class:
+    """
+    A utility class for managing database operations related to a trading bot.
+
+    Attributes:
+        connection_pool (pooling.MySQLConnectionPool): A connection pool for managing MySQL database connections.
+        db_pool (aiomysql.Pool): Asynchronous database connection pool, initialized to None.
+
+    Methods:
+        __init__(The_timeframe: str):
+            Initializes the class with the specified timeframe and sets up the necessary database tables.
+        _initialize_tables_Function():
+            Creates the required database tables if they do not already exist.
+        initialize_db_pool_Function():
+            Asynchronously initializes the database connection pool.
+        save_flags_Function(flag_list: list[Flag_Class]):
+            Asynchronously batch inserts multiple flags into the database, ensuring all dependencies are stored correctly.
+        _update_dp_weights_Function(dps_to_update: list):
+            Asynchronously updates the weights of decision points in the database.
+        _get_tradeable_DPs_Function() -> list[tuple[DP_Parameteres_Class, str]]:
+            Asynchronously fetches tradeable decision points (DPs) with a weight greater than 0 that are not already traded.
+        _insert_positions_batch(positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]):
+            Asynchronously inserts a batch of trading position records into the database.
+    """
     connection_pool = pooling.MySQLConnectionPool(
         pool_name="tradingbot_pool",
         pool_size=10,  # Adjust based on your workload
@@ -24,6 +45,25 @@ class Database_Class:
         database="tradingbotdb"
     )
     def __init__(self, The_timeframe: str):
+        """
+        Initializes the Database class with the specified timeframe and sets up the necessary database tables.
+        Args:
+            The_timeframe (str): The timeframe for which the database is being initialized. 
+                                 This value is used to create table names specific to the timeframe.
+        Attributes:
+            flag_points_table_name (str): Name of the table for storing flag points data.
+            important_dps_table_name (str): Name of the table for storing important decision points data.
+            flags_table_name (str): Name of the table for storing flags data.
+            Positions_table_name (str): Name of the table for storing positions data.
+            TimeFrame (str): The timeframe associated with this database instance.
+            detected_flags (int): Counter for the number of detected flags, initialized to 0.
+            Traded_DP_Set (set): A set to track traded decision points.
+            db_pool: Placeholder for the database connection pool, initialized to None.
+        Raises:
+            Exception: If the initialization of database tables fails, an error is logged.
+        Side Effects:
+            Logs information about the initialization process and any errors encountered.
+        """
         self.flag_points_table_name = f"Flag_Points_{The_timeframe}"
         self.important_dps_table_name = f"Important_DPs_{The_timeframe}"
         self.flags_table_name = f"Flags_{The_timeframe}"
@@ -39,7 +79,7 @@ class Database_Class:
         except Exception as e:
             print_and_logging_Function("error", f"Database initialization failed: {e}", "title")
 
-    def _initialize_tables_Function(self):
+    def _initialize_tables_Function(self):     
         queries = [
             f"""
             CREATE TABLE IF NOT EXISTS {self.flag_points_table_name} (
@@ -112,7 +152,24 @@ class Database_Class:
                 print_and_logging_Function("error", f"Error in initializing DP pool: {e}", "title")
 
     async def save_flags_Function(self, flag_list: list[Flag_Class]):
-        """Batch insert multiple flags, ensuring all dependencies are stored correctly."""
+        """
+        Batch insert multiple flags into the database, ensuring all dependencies are stored correctly.
+        This function handles the insertion of flags and their associated data points (e.g., High, Low, FTC, EL, MPL) 
+        into the database. It ensures that all related data is inserted in a transactional manner, maintaining data 
+        integrity and avoiding partial updates.
+        Args:
+            flag_list (list[Flag_Class]): A list of Flag_Class objects to be saved in the database. Each flag contains 
+                                          associated data points such as High, Low, FTC, EL, and MPL.
+        Raises:
+            Exception: If any error occurs during the database operations, the transaction is rolled back, and the 
+                       exception is logged.
+        Notes:
+            - The function initializes the database connection pool if not already initialized.
+            - It uses transactions to ensure atomicity of the batch insert operations.
+            - Duplicate entries are handled using `ON DUPLICATE KEY UPDATE` to avoid inserting duplicate records.
+            - The function updates the `detected_flags` attribute with the count of newly inserted flags.
+            - The function commits changes to the database after each batch insert operation.
+        """
         await self.initialize_db_pool_Function()
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
@@ -135,19 +192,19 @@ class Database_Class:
                         ))
 
                         # High Point
-                        if flag.high.ID_generator_Function() != None:
+                        if flag.high.ID_generator_Function() is not None:
                             flag_point_values.append((
                                 flag.high.ID_generator_Function(), flag.high.price, flag.high.time.strftime('%Y-%m-%d %H:%M:%S')
                             ))
 
                         # Low Point
-                        if flag.low.ID_generator_Function() != None:
+                        if flag.low.ID_generator_Function() is not None:
                             flag_point_values.append((
                                 flag.low.ID_generator_Function(), flag.low.price, flag.low.time.strftime('%Y-%m-%d %H:%M:%S')
                             ))
 
                         # FTC
-                        if flag.FTC.ID_generator_Function() != None:
+                        if flag.FTC.ID_generator_Function() is not None:
                             Important_DPs_values.append((
                                 flag.FTC.ID_generator_Function(), flag.FTC.type, flag.FTC.High.ID_generator_Function(), flag.FTC.Low.ID_generator_Function(),
                                 flag.FTC.weight, flag.FTC.first_valid_trade_time, flag.FTC.trade_direction 
@@ -160,7 +217,7 @@ class Database_Class:
                             ))
                         
                         # EL
-                        if flag.EL.ID_generator_Function() != None:
+                        if flag.EL.ID_generator_Function() is not None:
                             Important_DPs_values.append((
                                 flag.EL.ID_generator_Function(), flag.EL.type, flag.EL.High.ID_generator_Function(), flag.EL.Low.ID_generator_Function(),
                                 flag.EL.weight, flag.EL.first_valid_trade_time, flag.EL.trade_direction 
@@ -173,7 +230,7 @@ class Database_Class:
                             ))
 
                         # MPL
-                        if flag.MPL.ID_generator_Function() != None:
+                        if flag.MPL.ID_generator_Function() is not None:
                             Important_DPs_values.append((
                                 flag.MPL.ID_generator_Function(), flag.MPL.type, flag.MPL.High.ID_generator_Function(), flag.MPL.Low.ID_generator_Function(),
                                 flag.MPL.weight, flag.MPL.first_valid_trade_time, flag.MPL.trade_direction 
@@ -227,7 +284,24 @@ class Database_Class:
                     print_and_logging_Function("error", f"Error batch saving flags: {e}", "title")
 
     async def _update_dp_weights_Function(self, dps_to_update: list):
-        """Batch update all DP weights in a single database transaction"""
+        """
+        Asynchronously updates the weights of data points (DPs) in the database.
+        This function performs a batch update on the specified table to modify the 
+        weights of multiple data points based on their IDs.
+        Args:
+            dps_to_update (list): A list of tuples where each tuple contains:
+                - dp_id (int): The ID of the data point to update.
+                - weight (float): The new weight value to set for the data point.
+        Raises:
+            Exception: If an error occurs during the database operation, it logs the 
+            error and rolls back the transaction.
+        Notes:
+            - The function uses a connection pool (`self.db_pool`) to acquire a database 
+              connection and execute the batch update.
+            - The table name is specified by `self.important_dps_table_name`.
+            - The transaction is committed if successful, or rolled back in case of an error.
+        """
+        
         try:
             # Prepare the SQL query and values
             query = f"UPDATE {self.important_dps_table_name} SET weight = %s WHERE id = %s"
@@ -243,6 +317,38 @@ class Database_Class:
             await conn.rollback()  # Rollback if there's an error
 
     async def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
+        """
+        Asynchronously fetches tradeable Decision Points (DPs) from the database.
+        This function retrieves all important DPs with a weight greater than 0, 
+        along with their associated flag points (if any), and filters out DPs 
+        that have already been traded (exist in the Positions table). It then 
+        constructs and returns a list of DP objects paired with their IDs.
+        Returns:
+            list[tuple[DP_Parameteres_Class, str]]: A list of tuples where each tuple 
+            contains a DP_Parameteres_Class object representing a tradeable DP and 
+            its corresponding ID.
+        Raises:
+            Exception: Logs and handles any exceptions that occur during the database 
+            operations.
+        Notes:
+            - The function uses a connection pool (`db_pool`) to interact with the database.
+            - Flag points are fetched in bulk for efficiency and stored in a dictionary 
+              for quick lookup.
+            - The function ensures that no duplicate DPs are returned by checking against 
+              the Positions table.
+        Database Tables:
+            - `important_dps_table_name`: Stores the important DPs with their attributes.
+            - `flag_points_table_name`: Stores the flag points associated with DPs.
+            - `Positions_table_name`: Stores the traded DPs to avoid duplication.
+        Example Workflow:
+            1. Fetch all DPs with weight > 0 from the `important_dps_table_name`.
+            2. Retrieve associated flag points (High_Point and Low_Point) from 
+               `flag_points_table_name`.
+            3. Exclude DPs that already exist in the `Positions_table_name`.
+            4. Construct DP_Parameteres_Class objects for the remaining DPs and 
+               return them along with their IDs.
+        """
+        
         try:
             async with self.db_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
@@ -298,8 +404,27 @@ class Database_Class:
   
     async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]):
         """
-        Insert multiple positions in a batch using executemany.
-        :param positions: List of tuples containing data for each position
+        Asynchronously inserts a batch of trading position records into the database.
+        This method performs a batch insert of trading positions into the specified database table.
+        If a record with the same primary key already exists, the `ON DUPLICATE KEY UPDATE` clause
+        ensures that no changes are made to the existing record.
+        Args:
+            positions (list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]): 
+                A list of tuples, where each tuple represents a trading position with the following fields:
+                - Traded_DP (str): The traded data point.
+                - Order_type (str): The type of order (e.g., "buy" or "sell").
+                - Price (float): The price at which the trade was executed.
+                - SL (float): The stop-loss value.
+                - TP (float): The take-profit value.
+                - Last_modified_time (datetime.datetime): The last modification timestamp of the position.
+                - Vol (int): The volume of the trade.
+                - Order_ID (int): The unique identifier for the order.
+                - Result (float): The result or outcome of the trade.
+        Returns:
+            None: This function does not return a value. It commits the transaction to the database.
+        Raises:
+            Exception: If an error occurs during the database operation, an exception is raised with
+                       a descriptive error message.
         """
         # Validate input (we assume positions are already validated)
         if not positions:

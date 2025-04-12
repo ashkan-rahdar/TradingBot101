@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import json
 import asyncio
-import typing
 import bisect
 import numpy as np
 import datetime
@@ -23,7 +22,89 @@ from functions.Reaction_detector import main_reaction_detector
 from classes.Database import Database_Class
 
 class Timeframe_Class:
+    """
+    Timeframe_Class is a class designed to handle operations related to timeframes in a trading bot. 
+    It integrates with a MySQL database, performs flag detection, validates decision points (DPs), 
+    and manages trading positions.
+    Attributes:
+        timeframe (str): The timeframe associated with this instance.
+        DataSet (pd.DataFrame): A DataFrame containing market data for the given timeframe.
+        CMySQL_DataBase (Database_Class): An instance of the database class for interacting with MySQL.
+        detector (FlagDetector_Class): An instance of the flag detector class for detecting flags in the data.
+        dps_to_update (list[tuple[int, int]]): A list of decision points (DPs) that need to be updated.
+        Tradeable_DPs (list[tuple[DP_Parameteres_Class, int]]): A list of tradeable decision points.
+        inserting_BackTest_DB (list[tuple]): A list of backtest positions to be inserted into the database.
+    Methods:
+        __init__(The_timeframe: str):
+            Initializes the Timeframe_Class instance with the given timeframe.
+            Inputs:
+                - The_timeframe (str): The timeframe to be associated with this instance.
+            Outputs:
+                - None
+        set_data_Function(aDataSet: pd.DataFrame):
+            Sets the DataSet attribute with the provided market data.
+            Inputs:
+                - aDataSet (pd.DataFrame): The market data to be set.
+            Outputs:
+                - None
+        async detect_flags_Function():
+            Detects flags in the dataset using the detector instance.
+            Inputs:
+                - None
+            Outputs:
+                - None
+            Exceptions:
+                - RuntimeError: If flag detection fails.
+        async development():
+            Runs the main reaction detector on the dataset.
+            Inputs:
+                - None
+            Outputs:
+                - None
+            Exceptions:
+                - RuntimeError: If reaction detection fails.
+        async validate_DPs_Function():
+            Validates decision points (DPs) and updates their weights in the database.
+            Inputs:
+                - None
+            Outputs:
+                - None
+            Exceptions:
+                - Exception: If any error occurs during validation or database operations.
+        async Each_DP_validation_Function(aDP: DP_Parameteres_Class, The_index_DP: str):
+            Validates a single decision point (DP) and determines its tradeability.
+            Inputs:
+                - aDP (DP_Parameteres_Class): The decision point to validate.
+                - The_index_DP (str): The index of the decision point.
+            Outputs:
+                - None
+            Exceptions:
+                - Exception: If any error occurs during validation.
+        async Update_Positions_Function():
+            Opens new trading positions for tradeable decision points and inserts them into the database.
+            Inputs:
+                - None
+            Outputs:
+                - None
+            Exceptions:
+                - Exception: If any error occurs during position opening or database insertion.
+    """
+    
     def __init__(self, The_timeframe: str):
+        """
+        Initializes an instance of the class with the specified timeframe.
+        Args:
+            The_timeframe (str): A string representing the timeframe for the instance.
+        Attributes:
+            timeframe (str): Stores the provided timeframe.
+            DataSet (pd.DataFrame): An empty pandas DataFrame initialized for storing data.
+            CMySQL_DataBase (Database_Class): An instance of the `Database_Class` initialized with the given timeframe.
+            detector (FlagDetector_Class): An instance of the `FlagDetector_Class` initialized with the given timeframe 
+                                           and the `CMySQL_DataBase` instance.
+        This constructor sets up the necessary attributes for the class, including initializing a database connection 
+        and a flag detector specific to the provided timeframe.
+        """
+        
         self.timeframe = The_timeframe
         self.DataSet = pd.DataFrame()
         global config
@@ -34,6 +115,26 @@ class Timeframe_Class:
         self.DataSet = aDataSet
 
     async def detect_flags_Function(self):
+        """
+        Asynchronously detects flags within a given dataset using a detection function.
+        This function attempts to run a detection process on a dataset using the `run_with_retries_Function` 
+        utility to handle retries in case of transient failures. If the detection process fails, it logs 
+        the error and provides feedback about the failure.
+        Inputs:
+        - `self`: The instance of the class that contains this method. It provides access to the `detector`, 
+          `DataSet`, and `timeframe` attributes.
+            - `self.detector.run_detection_Function`: A callable function that performs the actual flag 
+              detection logic.
+            - `self.DataSet`: The dataset on which the flag detection is performed.
+            - `self.timeframe`: A string representing the timeframe associated with the detection process.
+        Outputs:
+        - None: This function does not return any value. It performs its operations asynchronously and 
+          handles errors by logging them.
+        Exceptions:
+        - Catches `RuntimeError` if the detection process fails and logs the error message using the 
+          `print_and_logging_Function` utility.
+        """
+        
         try:
             await run_with_retries_Function(self.detector.run_detection_Function,self.DataSet)
         except RuntimeError as The_error:
@@ -46,6 +147,32 @@ class Timeframe_Class:
             print_and_logging_Function("error", f"Reaction detection failed: {e}", "title")
 
     async def validate_DPs_Function(self):
+        """
+        Asynchronous function to validate and process tradeable data points (DPs) for backtesting and database updates.
+        This function performs the following tasks:
+        1. Retrieves a list of tradeable DPs from the database.
+        2. Prepares the dataset for processing by converting the 'time' column to a datetime format.
+        3. Validates each DP asynchronously using `Each_DP_validation_Function`.
+        4. Inserts validated backtest positions into the database.
+        5. Updates the weights of DPs in the database if necessary.
+        Attributes:
+            self.dps_to_update (list[tuple[int, int]]): A list of tuples containing DP IDs and their updated weights.
+            self.Tradeable_DPs (list[tuple[DP_Parameteres_Class, int]]): A list of tradeable DP objects and their indices.
+            self.inserting_BackTest_DB (list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]): 
+                A list of tuples representing backtest positions to be inserted into the database.
+        Steps:
+            1. Retrieve tradeable DPs using `self.CMySQL_DataBase._get_tradeable_DPs_Function()`.
+            2. Convert the 'time' column in `self.DataSet` to datetime format for processing.
+            3. Validate each DP asynchronously using `Each_DP_validation_Function` and gather results.
+            4. Insert validated backtest positions into the database using `self.CMySQL_DataBase._insert_positions_batch()`.
+            5. Update DP weights in the database using `self.CMySQL_DataBase._update_dp_weights_Function()` if there are updates.
+        Exceptions:
+            - Logs errors encountered during backtest position insertion or DP weight updates.
+            - Logs any general errors encountered during the validation process.
+        Returns:
+            None
+        """
+        
         try:
             # Initialize list to store DPs that need to be updated
             self.dps_to_update : list[tuple[int, int]] = []
@@ -82,6 +209,44 @@ class Timeframe_Class:
             print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
             
     async def Each_DP_validation_Function(self, aDP: DP_Parameteres_Class, The_index_DP: str):
+        """
+        Validates a Decision Point (DP) for trading based on the provided parameters and updates the relevant data structures.
+        This function evaluates whether a given DP is valid for trading based on its trade direction (Bullish or Bearish),
+        price levels, and the dataset of historical price data. It performs calculations to determine if the DP meets
+        the conditions for a trade and updates internal lists for tradeable DPs, DPs to update, and backtesting results.
+        Args:
+            aDP (DP_Parameteres_Class): 
+                An instance of the DP_Parameteres_Class containing the parameters of the Decision Point (DP) to validate.
+                This includes attributes such as:
+                    - `weight`: The weight of the DP (used to filter out invalid DPs).
+                    - `first_valid_trade_time`: The earliest time the DP is valid for trading.
+                    - `trade_direction`: The direction of the trade ("Bullish" or "Bearish").
+                    - `Low.price`: The low price level of the DP.
+                    - `High.price`: The high price level of the DP.
+            The_index_DP (str): 
+                A string identifier for the DP being validated.
+        Returns:
+            None: 
+                The function does not return a value. Instead, it updates the following internal attributes of the class:
+                    - `self.Tradeable_DPs`: A list of tuples containing tradeable DPs and their identifiers.
+                    - `self.dps_to_update`: A list of tuples containing DPs that need to be updated and their identifiers.
+                    - `self.inserting_BackTest_DB`: A list of tuples containing backtesting results for valid trades.
+        Raises:
+            Exception: 
+                If an error occurs during validation, an exception is raised with a message indicating the DP and the error.
+        Functionality:
+            - Prepares the time, high, and low price series from the dataset for efficient processing.
+            - Filters out invalid DPs based on their weight or if they are outside the valid time range.
+            - For Bearish DPs:
+                - Checks if any high price is greater than or equal to the DP's low price.
+                - Calculates the maximum risk-reward ratio (RR) for the trade.
+                - Updates the backtesting database or marks the DP as tradeable.
+            - For Bullish DPs:
+                - Checks if any low price is less than or equal to the DP's high price.
+                - Calculates the maximum risk-reward ratio (RR) for the trade.
+                - Updates the backtesting database or marks the DP as tradeable.
+        """
+        
         try:
             # Pre-calculate these values once outside the loop
             time_series = self.DataSet['time'].to_numpy(dtype='datetime64[ns]')
@@ -169,11 +334,50 @@ class Timeframe_Class:
             raise Exception(f"validating the {The_index_DP} DP: {e}")
     
     async def Update_Positions_Function(self):
+        """
+        Update_Positions_Function
+        This asynchronous function is responsible for updating trading positions by opening new positions 
+        for tradeable decision points (DPs) that have not yet been traded. It interacts with a trading 
+        module to open positions and inserts the details of successfully opened positions into a database.
+        Inputs:
+        - None (The function operates on the instance variables of the class it belongs to).
+        Key Operations:
+        1. Iterates through `self.Tradeable_DPs`:
+            - For each tradeable decision point (DP) and its index, checks if the DP has already been traded 
+              by verifying its presence in `self.CMySQL_DataBase.Traded_DP_Set`.
+            - If the DP has not been traded:
+                - Calls `CMetatrader_Module.Open_position_Function` to open a new position with the following parameters:
+                    - `order_type`: Determines whether the order is "Buy Limit" or "Sell Limit" based on the trade direction.
+                    - `vol`: Sets the volume of the trade (fixed at 0.01 in this implementation).
+                    - `price`: Sets the entry price based on the trade direction.
+                    - `sl`: Sets the stop-loss price based on the trade direction.
+                    - `tp`: Sets the take-profit price based on the trade direction.
+                - If the position opening fails, logs an error message.
+                - If the position opening succeeds:
+                    - Retrieves the correct order type using `CMetatrader_Module.reverse_order_type_mapping`.
+                    - Appends the position details to the `inserting_positions_DB` list for later database insertion.
+                    - Increments the `new_opened_positions` counter.
+                    - Logs a success message for the newly opened position.
+        2. Inserts the new positions into the database:
+            - Calls `self.CMySQL_DataBase._insert_positions_batch` with the `inserting_positions_DB` list.
+            - Logs the number of successfully opened and inserted positions.
+            - Catches and logs any exceptions that occur during the database insertion process.
+        Outputs:
+        - None (The function performs operations and logs results but does not return any value).
+        Notes:
+        - The function relies on external modules (`CMetatrader_Module` and `self.CMySQL_DataBase`) for trading 
+          and database operations, respectively.
+        - The function uses `print_and_logging_Function` for logging messages of different severity levels 
+          (e.g., "info", "error").
+        - The function assumes that `self.Tradeable_DPs` is a list of tuples containing tradeable decision points 
+          and their indices.
+        """
+        
         new_opened_positions = 0
         inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
 
         for aDP, The_index in self.Tradeable_DPs:
-            if not The_index in self.CMySQL_DataBase.Traded_DP_Set:
+            if The_index not in self.CMySQL_DataBase.Traded_DP_Set:
                 result = CMetatrader_Module.Open_position_Function(
                     order_type="Buy Limit" if aDP.trade_direction == "Bullish" else "Sell Limit",
                     vol=0.01,

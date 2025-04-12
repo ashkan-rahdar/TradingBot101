@@ -8,7 +8,6 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classes.FlagPoint import FlagPoint_Class
-from functions.logger import print_and_logging_Function
 from classes.DP_Parameteres import DP_Parameteres_Class
 
 
@@ -17,6 +16,26 @@ with open("./config.json", "r") as file:
     config = json.load(file)
 
 class Flag_Class:
+    """
+    Flag_Class is a representation of a trading flag pattern, which is a technical analysis concept used in trading. 
+    This class encapsulates the properties and methods required to define, analyze, and validate a flag pattern.
+    Attributes:
+        flag_type (Literal["Bullish", "Bearish", "Undefined"]): The type of the flag pattern.
+        high (FlagPoint_Class): The high point of the flag.
+        low (FlagPoint_Class): The low point of the flag.
+        duration (int): The duration of the flag pattern.
+        Start_index (int): The starting index of the flag in the dataset.
+        End_index (int): The ending index of the flag in the dataset.
+        End_time (Any): The ending time of the flag pattern.
+        Start_time (Any): The starting time of the flag pattern.
+        Unique_point (Any): The unique point of the flag, determined by the flag type.
+        FTC (DP_Parameteres_Class): The first trade confirmation (FTC) parameters.
+        EL (DP_Parameteres_Class): The entry level (EL) parameters.
+        weight (float): The weight of the flag pattern.
+        status (Literal["Major", "Minor", "Undefined"]): The status of the flag pattern.
+        MPL (DP_Parameteres_Class): The most probable level (MPL) parameters.
+    """
+    
     def __init__(self,  
                  The_flag_type: typing.Literal["Bullish", "Bearish","Undefined"], 
                  The_high: FlagPoint_Class, 
@@ -25,7 +44,18 @@ class Flag_Class:
                  The_start_index: int, 
                  The_end_index: int, 
                  The_start_FTC: int):
-
+        """        
+        __init__(self, The_flag_type, The_high, The_low, The_data_in_flag, The_start_index, The_end_index, The_start_FTC):
+            Initializes the Flag_Class object with the given parameters.
+            Args:
+                The_flag_type (Literal["Bullish", "Bearish", "Undefined"]): The type of the flag pattern.
+                The_high (FlagPoint_Class): The high point of the flag.
+                The_low (FlagPoint_Class): The low point of the flag.
+                The_data_in_flag (pd.DataFrame): The dataset containing the flag data.
+                The_start_index (int): The starting index of the flag in the dataset.
+                The_end_index (int): The ending index of the flag in the dataset.
+                The_start_FTC (int): The starting index for the first trade confirmation.
+        """
         self.flag_type: typing.Literal["Bullish", "Bearish","Undefined"] = The_flag_type
         self.high = The_high
         self.low = The_low
@@ -78,6 +108,14 @@ class Flag_Class:
                             dataset: pd.DataFrame,            
                             flag_type: typing.Literal["Bullish", "Bearish", "Undefined"],   
                             start_of_index: int) -> DP_Parameteres_Class:
+        """ Detects the important data points (DP) for the flag pattern.
+            Args:
+                dataset (pd.DataFrame): The dataset containing the flag data.
+                flag_type (Literal["Bullish", "Bearish", "Undefined"]): The type of the flag pattern.
+                start_of_index (int): The starting index for the detection.
+            Returns:
+                DP_Parameteres_Class: The detected data points for the flag pattern.
+        """
         time = dataset['time']
 
         DP = DP_Parameteres_Class(FlagPoint_Class(None, None,None), FlagPoint_Class(None, None,None))
@@ -141,12 +179,19 @@ class Flag_Class:
         max_weight  = config["trading_configs"]["risk_management"]["max_wieght"] 
         # duration of flag
 
-        if(self.duration / 15 < max_weight): weights.append(self.duration / 15)
-        else: weights.append(max_weight)
+        if(self.duration / 15 < max_weight): 
+            weights.append(self.duration / 15)
+        else: 
+            weights.append(max_weight)
         
         return sum(weights)
     
     def validate_DP_Function(self, The_Important_DP: DP_Parameteres_Class, The_dataset: pd.DataFrame):
+        """Validates the detected data points (DP) for the flag pattern.
+            Args:
+                The_Important_DP (DP_Parameteres_Class): The detected data points to validate.
+                The_dataset (pd.DataFrame): The dataset containing the flag data.
+        """
         highs = The_dataset['high'].to_numpy()
         lows = The_dataset['low'].to_numpy()
         local_Lows_index = np.where(The_dataset['is_local_min'].to_numpy())[0]
