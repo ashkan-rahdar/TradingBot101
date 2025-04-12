@@ -84,7 +84,7 @@ class Database_Class:
                 Last_modified_time DATETIME NOT NULL,
                 Vol FLOAT Not Null,
                 Order_ID INT Not Null,
-                Result INT NOT Null DEFAULT 0
+                Result FLOAT NOT Null DEFAULT 0
             )
             """
         ]
@@ -296,7 +296,7 @@ class Database_Class:
             print_and_logging_Function("error", f"Error in fetching tradeable DPs: {e}", "title")
             return []
   
-    async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int]]):
+    async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]):
         """
         Insert multiple positions in a batch using executemany.
         :param positions: List of tuples containing data for each position
@@ -308,8 +308,8 @@ class Database_Class:
         # Prepare the SQL query
         query = f"""
             INSERT INTO {self.Positions_table_name} 
-            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID, Result)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE Traded_DP = Traded_DP
         """
 

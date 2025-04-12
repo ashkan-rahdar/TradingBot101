@@ -56,6 +56,7 @@ class Timeframe_Class:
             # Pre-calculate these values once
             self.DataSet['time'] = self.DataSet['time'].astype('datetime64[ns]')
             
+            self.inserting_BackTest_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
             tasks = []
             for The_valid_DP, index_of_DP in valid_DPs:
                 task = self.Each_DP_validation_Function(The_valid_DP, index_of_DP)
@@ -63,6 +64,13 @@ class Timeframe_Class:
             
             await asyncio.gather(*tasks)  # Await all tasks
             
+            try:
+                await self.CMySQL_DataBase._insert_positions_batch(self.inserting_BackTest_DB)
+                if len(self.inserting_BackTest_DB) > 0 :
+                    print_and_logging_Function("info", f"{len(self.inserting_BackTest_DB)} backtest positions inserted in DB", "title")
+            except Exception as e:
+                print_and_logging_Function("error", f"Error in inserting BackTest position in DB: {e}", "title")
+                
             # Batch update the database
             if self.dps_to_update:
                 try:
@@ -93,15 +101,67 @@ class Timeframe_Class:
             # Use NumPy's efficient array operations instead of loops
             if aDP.trade_direction == "Bearish":
                 # Check if any high price is >= the DP's Low price
-                if np.any(high_series[index:] >= aDP.Low.price):
+                open_hits = np.flatnonzero(high_series[index:] >= aDP.Low.price)
+                if open_hits.size != 0:
                     self.dps_to_update.append((The_index_DP, 0))
+                    entry_idx = index + open_hits[0]
+                    lows = low_series[entry_idx:]
+                    highs = high_series[entry_idx:]
+
+                    sl_hits = np.flatnonzero(highs >= aDP.High.price)
+                    sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
+                    if sl_idx:
+                       lows = low_series[entry_idx:sl_idx]
+
+                    if lows.size == 0:
+                        max_rr = -1
+                    else:
+                        max_rr = (aDP.High.price - lows.min()) / (aDP.High.price - aDP.Low.price)
+
+                    self.inserting_BackTest_DB.append((
+                        The_index_DP,
+                        "Sell Limit",
+                        aDP.Low.price,
+                        aDP.High.price,
+                        -1,
+                        time_series[entry_idx],
+                        -1,
+                        -1,
+                        max_rr
+                    ))
                 else:
                     self.Tradeable_DPs.append((aDP, The_index_DP))
                     
             elif aDP.trade_direction == "Bullish":
                 # Check if any low price is <= the DP's High price
-                if np.any(low_series[index:] <= aDP.High.price):
+                open_hits = np.flatnonzero(low_series[index:] <= aDP.High.price)
+                if open_hits.size != 0:
                     self.dps_to_update.append((The_index_DP, 0))
+                    entry_idx = index + open_hits[0]
+                    lows = low_series[entry_idx:]
+                    highs = high_series[entry_idx:]
+                    
+                    sl_hits = np.flatnonzero(lows <= aDP.Low.price)
+                    sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
+                    if sl_idx:
+                       highs = high_series[entry_idx:sl_idx]
+                    
+                    if highs.size == 0:
+                        max_rr = -1
+                    else:
+                        max_rr = (highs.max() - aDP.High.price) / (aDP.High.price - aDP.Low.price)
+
+                    self.inserting_BackTest_DB.append((
+                        The_index_DP,
+                        "Buy Limit",
+                        aDP.High.price,
+                        aDP.Low.price,
+                        -1,
+                        time_series[entry_idx],
+                        -1,
+                        -1,
+                        max_rr
+                    ))
                 else:
                     self.Tradeable_DPs.append((aDP, The_index_DP))
 
@@ -110,7 +170,7 @@ class Timeframe_Class:
     
     async def Update_Positions_Function(self):
         new_opened_positions = 0
-        inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int]] = []
+        inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
 
         for aDP, The_index in self.Tradeable_DPs:
             if not The_index in self.CMySQL_DataBase.Traded_DP_Set:
@@ -128,14 +188,15 @@ class Timeframe_Class:
                     order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type)
 
                     inserting_positions_DB.append((
-                        The_index,  # traded_dp_id
-                        order_type,  # order_type
-                        result.request.price,  # price
-                        result.request.sl,  # sl
-                        result.request.tp,  # tp
+                        The_index,                # traded_dp_id
+                        order_type,               # order_type
+                        result.request.price,     # price
+                        result.request.sl,        # sl
+                        result.request.tp,        # tp
                         datetime.datetime.now(),  # Last_modified_time
-                        result.request.volume,  # vol
-                        result.order  # order_id
+                        result.request.volume,    # vol
+                        result.order,             # order_id
+                        0                         # The result of trade
                     ))
 
                     new_opened_positions += 1

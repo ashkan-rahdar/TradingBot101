@@ -1,5 +1,6 @@
 import typing
 import datetime
+import pandas as pd
 from .FlagPoint import FlagPoint_Class
 
 class DP_Parameteres_Class:
@@ -16,6 +17,12 @@ class DP_Parameteres_Class:
         self.weight = weight
         self.first_valid_trade_time =  first_valid_trade_time
         self.trade_direction = trade_direction
+
+        # if self.High != None and self.Low != None and self.High.time != None and self.Low.time != None:
+        #     self.length = int(abs(self.High.time - self.Low.time)/ pd.Timedelta("1min"))
+        # self.ratio_to_flag = 1
+        # self.number_used_candle = 0
+
         self.ID_generator_Function()
 
     def ID_generator_Function(self):
