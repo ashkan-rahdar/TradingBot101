@@ -155,6 +155,7 @@ class Timeframe_Class:
         3. Validates each DP asynchronously using `Each_DP_validation_Function`.
         4. Inserts validated backtest positions into the database.
         5. Updates the weights of DPs in the database if necessary.
+        
         Attributes:
             self.dps_to_update (list[tuple[int, int]]): A list of tuples containing DP IDs and their updated weights.
             self.Tradeable_DPs (list[tuple[DP_Parameteres_Class, int]]): A list of tradeable DP objects and their indices.
@@ -335,12 +336,13 @@ class Timeframe_Class:
     
     async def Update_Positions_Function(self):
         """
-        Update_Positions_Function
         This asynchronous function is responsible for updating trading positions by opening new positions 
         for tradeable decision points (DPs) that have not yet been traded. It interacts with a trading 
         module to open positions and inserts the details of successfully opened positions into a database.
+        
         Inputs:
         - None (The function operates on the instance variables of the class it belongs to).
+        
         Key Operations:
         1. Iterates through `self.Tradeable_DPs`:
             - For each tradeable decision point (DP) and its index, checks if the DP has already been traded 
@@ -362,8 +364,10 @@ class Timeframe_Class:
             - Calls `self.CMySQL_DataBase._insert_positions_batch` with the `inserting_positions_DB` list.
             - Logs the number of successfully opened and inserted positions.
             - Catches and logs any exceptions that occur during the database insertion process.
+            
         Outputs:
         - None (The function performs operations and logs results but does not return any value).
+        
         Notes:
         - The function relies on external modules (`CMetatrader_Module` and `self.CMySQL_DataBase`) for trading 
           and database operations, respectively.
@@ -388,6 +392,8 @@ class Timeframe_Class:
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE:
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                 else:
+                    if not config["runtime"]["Able_to_Open_positions"]:
+                        CMetatrader_Module.cancel_order(result.order)
                     # Get the correct order type from the mapping
                     order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type)
 

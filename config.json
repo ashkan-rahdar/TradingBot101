@@ -8,7 +8,7 @@
     },
     "trading_configs":{
         "timeframes": ["M15"],
-        "asset": "BTCUSD",
+        "asset": "EURUSD",
 
         "risk_management":{
             "R" : 0.1,
@@ -20,6 +20,7 @@
             "status": true,
             "password": "ashkan"
         }, 
-        "Another_function_syntax": "ashkan1" 
+        "Another_function_syntax": "ashkan1",
+        "Able_to_Open_positions": false
     }
 }

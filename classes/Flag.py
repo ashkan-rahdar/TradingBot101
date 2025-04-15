@@ -9,6 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from classes.FlagPoint import FlagPoint_Class
 from classes.DP_Parameteres import DP_Parameteres_Class
+from functions.logger import print_and_logging_Function
 
 
 # Load JSON config file
@@ -56,54 +57,79 @@ class Flag_Class:
                 The_end_index (int): The ending index of the flag in the dataset.
                 The_start_FTC (int): The starting index for the first trade confirmation.
         """
-        self.flag_type: typing.Literal["Bullish", "Bearish","Undefined"] = The_flag_type
-        self.high = The_high
-        self.low = The_low
-        self.duration = The_end_index - (The_low.index if The_flag_type == "Bearish" else The_high.index)
-        self.Start_index = The_start_index
-        self.End_index = The_end_index
-        self.End_time = The_data_in_flag['time'][The_end_index]
-        self.Start_time = The_data_in_flag['time'][The_start_index]
-        self.Unique_point = The_high.time if self.flag_type == "Bullish" else The_low.time
+        try:
+            self.flag_type: typing.Literal["Bullish", "Bearish","Undefined"] = The_flag_type
+            self.high = The_high
+            self.low = The_low
+            self.duration = The_end_index - (The_low.index if The_flag_type == "Bearish" else The_high.index)
+            self.Start_index = The_start_index
+            self.End_index = The_end_index
+            self.End_time = The_data_in_flag['time'][The_end_index]
+            self.Start_time = The_data_in_flag['time'][The_start_index]
+            self.Unique_point = The_high.time if self.flag_type == "Bullish" else The_low.time
 
-        self.FTC = self.DP_Detector_Function(
-                                            dataset = (The_data_in_flag.iloc[The_high.index - The_start_index : The_low.index - The_start_index + 1] if The_flag_type=="Bullish" 
-                                                    else The_data_in_flag.iloc[The_low.index - The_start_index : The_high.index - The_start_index + 1]),
-                                            flag_type = self.flag_type,
-                                            start_of_index = The_high.index if The_flag_type == "Bullish" else The_low.index)
-        self.FTC.type = "FTC"
-        self.FTC.first_valid_trade_time = The_start_FTC
-        
-        if The_flag_type == "Bullish":
-            EL_direction = "Bearish"
-        elif The_flag_type == "Bearish":
-            EL_direction = "Bullish"
-        else:
-            EL_direction = "Undefined"
+            self.FTC = self.DP_Detector_Function(
+                                                dataset = (The_data_in_flag.iloc[The_high.index - The_start_index : The_low.index - The_start_index + 1] if The_flag_type=="Bullish" 
+                                                        else The_data_in_flag.iloc[The_low.index - The_start_index : The_high.index - The_start_index + 1]),
+                                                flag_type = self.flag_type,
+                                                start_of_index = The_high.index if The_flag_type == "Bullish" else The_low.index)
+            self.FTC.type = "FTC"
+            self.FTC.first_valid_trade_time = The_start_FTC
+            
+            if The_flag_type == "Bullish":
+                EL_direction = "Bearish"
+            elif The_flag_type == "Bearish":
+                EL_direction = "Bullish"
+            else:
+                EL_direction = "Undefined"
 
-        self.EL = self.DP_Detector_Function(
-                                            dataset= (The_data_in_flag.iloc[:The_high.index - The_start_index + 1] if The_flag_type=="Bullish" 
-                                            else The_data_in_flag.iloc[:The_low.index - The_start_index + 1]),
-                                            flag_type = EL_direction,
-                                            start_of_index= self.Start_index)
-        self.EL.type = "EL"
-        self.weight = self.weight_of_flag_Function()
-        self.status :typing.Literal["Major", "Minor","Undefined"] = "Major"
-        
+            self.EL = self.DP_Detector_Function(
+                                                dataset= (The_data_in_flag.iloc[:The_high.index - The_start_index + 1] if The_flag_type=="Bullish" 
+                                                else The_data_in_flag.iloc[:The_low.index - The_start_index + 1]),
+                                                flag_type = EL_direction,
+                                                start_of_index= self.Start_index)
+            self.EL.type = "EL"
+            self.weight = self.weight_of_flag_Function()
+            self.status :typing.Literal["Major", "Minor","Undefined"] = "Major"
+            
 
-        if The_flag_type == "Bullish":
-            self.MPL = DP_Parameteres_Class(self.high, self.EL.High)
-            self.MPL.weight = 1
-        elif The_flag_type == "Bearish":
-            self.MPL = DP_Parameteres_Class(self.EL.Low, self.low)
-            self.MPL.weight = 1
-        else:
-            self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
-        self.MPL.type = "MPL"
+            if The_flag_type == "Bullish":
+                self.MPL = DP_Parameteres_Class(self.high, self.EL.High)
+                self.MPL.weight = 1
+                if self.EL.length is not None:
+                    self.MPL.length_cal_Function()
+            elif The_flag_type == "Bearish":
+                self.MPL = DP_Parameteres_Class(self.EL.Low, self.low)
+                self.MPL.weight = 1
+                if self.EL.length is not None:
+                    self.MPL.length_cal_Function()
+            else:
+                self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
+            self.MPL.type = "MPL"
 
-        self.FTC.trade_direction = self.EL.trade_direction = self.MPL.trade_direction = self.flag_type
-        self.FTC.first_valid_trade_time = self.EL.first_valid_trade_time = self.MPL.first_valid_trade_time = self.End_time
-        
+            self.FTC.trade_direction = self.EL.trade_direction = self.MPL.trade_direction = self.flag_type
+            self.FTC.first_valid_trade_time = self.EL.first_valid_trade_time = self.MPL.first_valid_trade_time = self.End_time
+            
+            if self.FTC.length is not None:
+                self.DP_feature_extraction_Function(self.FTC, 
+                                        The_data_in_flag.iloc[self.low.index - The_start_index:] if The_flag_type == "Bullish"
+                                        else The_data_in_flag.iloc[self.high.index - The_start_index:])
+            if self.EL.length is not None:
+                self.DP_feature_extraction_Function(self.EL,
+                                        The_data_in_flag.iloc[self.low.index - The_start_index:] if The_flag_type == "Bullish"
+                                        else The_data_in_flag.iloc[self.high.index - The_start_index:])
+                if self.FTC.length is not None:
+                    self.FTC.related_DP_indexes.append(self.EL.ID_generator_Function())
+                    self.FTC.related_DP_indexes.append(self.MPL.ID_generator_Function())
+                
+                self.EL.related_DP_indexes.append(self.MPL.ID_generator_Function())
+            if self.MPL.length is not None:
+                self.DP_feature_extraction_Function(self.MPL,
+                                        The_data_in_flag.iloc[self.low.index - The_start_index:] if The_flag_type == "Bullish"
+                                        else The_data_in_flag.iloc[self.high.index - The_start_index:])
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in creating the {self.Unique_point} flag: {e}", "title")
+            
     def DP_Detector_Function(self, 
                             dataset: pd.DataFrame,            
                             flag_type: typing.Literal["Bullish", "Bearish", "Undefined"],   
@@ -142,6 +168,7 @@ class Flag_Class:
                 DP.High.time = time[DP.High.index]
                 DP.High.price = high_of_DP
                 DP.weight = 1
+                DP.length_cal_Function()
             else:
                 DP.weight = 0
         elif flag_type == "Bearish":
@@ -169,6 +196,7 @@ class Flag_Class:
                 DP.Low.time = time[DP.Low.index]
                 DP.Low.price = low_of_DP
                 DP.weight = 1
+                DP.length_cal_Function()
             else:
                 DP.weight = 0
         return DP
@@ -186,43 +214,22 @@ class Flag_Class:
         
         return sum(weights)
     
-    def validate_DP_Function(self, The_Important_DP: DP_Parameteres_Class, The_dataset: pd.DataFrame):
-        """Validates the detected data points (DP) for the flag pattern.
-            Args:
-                The_Important_DP (DP_Parameteres_Class): The detected data points to validate.
-                The_dataset (pd.DataFrame): The dataset containing the flag data.
-        """
-        highs = The_dataset['high'].to_numpy()
-        lows = The_dataset['low'].to_numpy()
-        local_Lows_index = np.where(The_dataset['is_local_min'].to_numpy())[0]
-        local_Highs_index = np.where(The_dataset['is_local_max'].to_numpy())[0]
-
-        if The_Important_DP.weight != 1:
-            return
-
-        if self.flag_type == "Bearish":
-            if local_Highs_index.size == 0:
-                return
-
-            local_Highs = highs[local_Highs_index]
-            for high in local_Highs:
-                if high < The_Important_DP.High.price and high > The_Important_DP.Low.price:
-                    index_high = np.where(highs == high)[0][-1]
-                    if lows[:index_high].min() <= The_Important_DP.Low.price:
-                        The_Important_DP.weight = 0
-                        break
-
-        elif self.flag_type == "Bullish":
-            if local_Lows_index.size == 0:
-                return
-
-            local_Lows = lows[local_Lows_index]
-            for low in local_Lows:
-                if low > The_Important_DP.Low.price and low < The_Important_DP.High.price:
-                    index_low = np.where(lows == low)[0][-1]
-                    if highs[:index_low].max() >= The_Important_DP.High.price:
-                        The_Important_DP.weight = 0
-                        break
+    def DP_feature_extraction_Function(self, aDP: DP_Parameteres_Class, Dataset: pd.DataFrame):
+        if aDP.trade_direction == "Bullish":
+            mask = (Dataset['low'] >= aDP.Low.price) & (Dataset['low'] <= aDP.High.price)
+            filtered_lows = Dataset['low'][mask]
+            aDP.number_used_candle = len(filtered_lows)
+            if not filtered_lows.empty:
+                aDP.used_ratio = (aDP.High.price - filtered_lows.min()) / (aDP.High.price - aDP.Low.price)
+        elif aDP.trade_direction == "Bearish":
+            mask = (Dataset['high'] >= aDP.Low.price) & (Dataset['high'] <= aDP.High.price)
+            filtered_highs = Dataset['high'][mask]
+            aDP.number_used_candle = len(filtered_highs)
+            if not filtered_highs.empty:
+                aDP.used_ratio = (filtered_highs.max() - aDP.Low.price) / (aDP.High.price - aDP.Low.price)
+                
+        aDP.ratio_to_flag = (aDP.High.price - aDP.Low.price) / (self.high.price - self.low.price)
+        return
     
     def __repr__(self):
         return (f"The Detected Flag: Type: {self.flag_type}, High: {self.high}, Low: {self.low}, "

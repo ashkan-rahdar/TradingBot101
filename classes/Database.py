@@ -96,7 +96,13 @@ class Database_Class:
                 Low_Point VARCHAR(255) NULL,
                 weight FLOAT NULL,
                 first_valid_trade_time DATETIME NOT NULL,
-                trade_direction ENUM('Bullish', 'Bearish', 'Undefined') NULL
+                trade_direction ENUM('Bullish', 'Bearish', 'Undefined') NULL,
+                length FLOAT NULL,
+                Flag_Ratio FLOAT NULL,
+                NO_Used_Candles INT NULL,
+                Used_Ratio FLOAT NULL,
+                Related_DP_1 VARCHAR(255) NULL,
+                Related_DP_2 VARCHAR(255) NULL
             )
             """,
             f"""
@@ -205,9 +211,17 @@ class Database_Class:
 
                         # FTC
                         if flag.FTC.ID_generator_Function() is not None:
+                            if len(flag.FTC.related_DP_indexes)== 0: 
+                                related_DP_1 = None
+                                related_DP_2 = None
+                            else:
+                                related_DP_1 = flag.FTC.related_DP_indexes[0]
+                                related_DP_2 = flag.FTC.related_DP_indexes[1]
+                                    
                             Important_DPs_values.append((
                                 flag.FTC.ID_generator_Function(), flag.FTC.type, flag.FTC.High.ID_generator_Function(), flag.FTC.Low.ID_generator_Function(),
-                                flag.FTC.weight, flag.FTC.first_valid_trade_time, flag.FTC.trade_direction 
+                                flag.FTC.weight, flag.FTC.first_valid_trade_time, flag.FTC.trade_direction, flag.FTC.length,
+                                flag.FTC.ratio_to_flag, flag.FTC.number_used_candle, flag.FTC.used_ratio, related_DP_1, related_DP_2
                             ))
                             flag_point_values.append((
                                 flag.FTC.High.ID_generator_Function(), flag.FTC.High.price, flag.FTC.High.time.strftime('%Y-%m-%d %H:%M:%S')
@@ -220,7 +234,8 @@ class Database_Class:
                         if flag.EL.ID_generator_Function() is not None:
                             Important_DPs_values.append((
                                 flag.EL.ID_generator_Function(), flag.EL.type, flag.EL.High.ID_generator_Function(), flag.EL.Low.ID_generator_Function(),
-                                flag.EL.weight, flag.EL.first_valid_trade_time, flag.EL.trade_direction 
+                                flag.EL.weight, flag.EL.first_valid_trade_time, flag.EL.trade_direction, flag.EL.length,
+                                flag.EL.ratio_to_flag, flag.EL.number_used_candle, flag.EL.used_ratio, flag.EL.related_DP_indexes[0], None
                             ))
                             flag_point_values.append((
                                 flag.EL.High.ID_generator_Function(), flag.EL.High.price, flag.EL.High.time.strftime('%Y-%m-%d %H:%M:%S')
@@ -233,7 +248,8 @@ class Database_Class:
                         if flag.MPL.ID_generator_Function() is not None:
                             Important_DPs_values.append((
                                 flag.MPL.ID_generator_Function(), flag.MPL.type, flag.MPL.High.ID_generator_Function(), flag.MPL.Low.ID_generator_Function(),
-                                flag.MPL.weight, flag.MPL.first_valid_trade_time, flag.MPL.trade_direction 
+                                flag.MPL.weight, flag.MPL.first_valid_trade_time, flag.MPL.trade_direction, flag.MPL.length,
+                                flag.MPL.ratio_to_flag, flag.MPL.number_used_candle, flag.MPL.used_ratio, None, None
                             ))
                             flag_point_values.append((
                                 flag.MPL.High.ID_generator_Function(), flag.MPL.High.price, flag.MPL.High.time.strftime('%Y-%m-%d %H:%M:%S')
@@ -262,8 +278,9 @@ class Database_Class:
 
                     await cursor.executemany(
                         f"""INSERT INTO {self.important_dps_table_name} 
-                            (id, type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            (id, type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction, length, 
+                            Flag_Ratio, NO_Used_Candles, Used_Ratio, Related_DP_1, Related_DP_2)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON DUPLICATE KEY UPDATE id = id""",
                         Important_DPs_values
                     )

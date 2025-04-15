@@ -1,8 +1,17 @@
 import typing
 import datetime
+import pandas as pd
 from .FlagPoint import FlagPoint_Class
 
 class DP_Parameteres_Class:
+    
+    High: FlagPoint_Class 
+    Low: FlagPoint_Class
+    type: typing.Literal["FTC", "EL", "MPL"] = "FTC"
+    weight: int = 0
+    first_valid_trade_time : datetime.datetime = datetime.datetime.now()
+    trade_direction : typing.Literal["Bullish", "Bearish", "Undefined"] = "Undefined"
+    
     """
     DP_Parameteres_Class is a class designed to encapsulate the parameters and attributes 
     associated with a trading bot's decision point (DP). It includes information about 
@@ -71,10 +80,12 @@ class DP_Parameteres_Class:
         self.first_valid_trade_time =  first_valid_trade_time
         self.trade_direction = trade_direction
 
-        # if self.High != None and self.Low != None and self.High.time != None and self.Low.time != None:
-        #     self.length = int(abs(self.High.time - self.Low.time)/ pd.Timedelta("1min"))
-        # self.ratio_to_flag = 1
-        # self.number_used_candle = 0
+        self.length = None    
+        self.ratio_to_flag = 1
+        self.number_used_candle = 0
+        self.used_ratio = 0
+        
+        self.related_DP_indexes = []
 
         self.ID_generator_Function()
 
@@ -85,7 +96,13 @@ class DP_Parameteres_Class:
             self.id = None
         return self.id
     
+    def length_cal_Function(self):
+        self.length = int(abs(self.High.time - self.Low.time)/ pd.Timedelta("1min"))
+        
     def __repr__(self):
         return (f"DP_Parameteres_Class(type={self.type}, High={self.High}, Low={self.Low}, "
                 f"weight={self.weight}, first_valid_trade_time={self.first_valid_trade_time}, "
-                f"trade_direction={self.trade_direction})")
+                f"trade_direction={self.trade_direction}, " f"length= {self.length}, "
+                f"ratio to flag = {self.ratio_to_flag}, " f"number used candle= {self.number_used_candle}, "
+                f"used ratio= {self.used_ratio}, " f"related DP indexes= {self.related_DP_indexes})"
+                "______________________________________")
