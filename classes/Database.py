@@ -44,6 +44,7 @@ class Database_Class:
         password="Nama-123456",
         database="tradingbotdb"
     )
+    
     def __init__(self, The_timeframe: str):
         """
         Initializes the Database class with the specified timeframe and sets up the necessary database tables.
@@ -102,7 +103,8 @@ class Database_Class:
                 NO_Used_Candles INT NULL,
                 Used_Ratio FLOAT NULL,
                 Related_DP_1 VARCHAR(255) NULL,
-                Related_DP_2 VARCHAR(255) NULL
+                Related_DP_2 VARCHAR(255) NULL,
+                Result FLOAT NOT Null DEFAULT 0
             )
             """,
             f"""
@@ -122,7 +124,7 @@ class Database_Class:
             f"""
             CREATE TABLE IF NOT EXISTS {self.Positions_table_name} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                Traded_DP VARCHAR(255),
+                Traded_DP VARCHAR(255) UNIQUE,
                 Order_type ENUM('Buy', 'Sell', 'Buy Limit', 'Sell Limit') NOT NULL,
                 Price FLOAT NOT NULL,
                 SL FLOAT NOT NULL,
@@ -307,7 +309,7 @@ class Database_Class:
         weights of multiple data points based on their IDs.
         Args:
             dps_to_update (list): A list of tuples where each tuple contains:
-                - dp_id (int): The ID of the data point to update.
+                - dp_id (str): The ID of the data point to update.
                 - weight (float): The new weight value to set for the data point.
         Raises:
             Exception: If an error occurs during the database operation, it logs the 
@@ -333,6 +335,39 @@ class Database_Class:
             print_and_logging_Function("error", f"Error in batch updating DP weights: {e}", "title")
             await conn.rollback()  # Rollback if there's an error
 
+    async def _update_dp_Results_Function(self, dps_to_update: list):
+        """
+        Asynchronously updates the Result of data points (DPs) in the database.
+        This function performs a batch update on the specified table to modify the 
+        Results of multiple data points based on their IDs.
+        Args:
+            dps_to_update (list): A list of tuples where each tuple contains:
+                - dp_id (str): The ID of the data point to update.
+                - Result (float): The new Result value to set for the data point.
+        Raises:
+            Exception: If an error occurs during the database operation, it logs the 
+            error and rolls back the transaction.
+        Notes:
+            - The function uses a connection pool (`self.db_pool`) to acquire a database 
+              connection and execute the batch update.
+            - The table name is specified by `self.important_dps_table_name`.
+            - The transaction is committed if successful, or rolled back in case of an error.
+        """
+        
+        try:
+            # Prepare the SQL query and values
+            query = f"UPDATE {self.important_dps_table_name} SET Result = %s WHERE id = %s"
+            values = [(Result, dp_id) for dp_id, Result in dps_to_update]
+
+            # Execute the batch update
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.executemany(query, values)  # Perform the batch update
+                    await conn.commit()  # Commit the transaction
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in batch updating DP Results: {e}", "title")
+            await conn.rollback()  # Rollback if there's an error
+            
     async def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
         """
         Asynchronously fetches tradeable Decision Points (DPs) from the database.

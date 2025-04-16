@@ -176,15 +176,15 @@ class Timeframe_Class:
         
         try:
             # Initialize list to store DPs that need to be updated
-            self.dps_to_update : list[tuple[int, int]] = []
+            self.dps_to_update : list[tuple[str, float]] = []
             self.Tradeable_DPs: list[tuple[DP_Parameteres_Class, int]] = []
+            self.inserting_BackTest_DB: list[tuple[str, float]] = []
             
             valid_DPs = await self.CMySQL_DataBase._get_tradeable_DPs_Function()
             
             # Pre-calculate these values once
             self.DataSet['time'] = self.DataSet['time'].astype('datetime64[ns]')
             
-            self.inserting_BackTest_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
             tasks = []
             for The_valid_DP, index_of_DP in valid_DPs:
                 task = self.Each_DP_validation_Function(The_valid_DP, index_of_DP)
@@ -193,7 +193,7 @@ class Timeframe_Class:
             await asyncio.gather(*tasks)  # Await all tasks
             
             try:
-                await self.CMySQL_DataBase._insert_positions_batch(self.inserting_BackTest_DB)
+                await self.CMySQL_DataBase._update_dp_Results_Function(self.inserting_BackTest_DB)
                 if len(self.inserting_BackTest_DB) > 0 :
                     print_and_logging_Function("info", f"{len(self.inserting_BackTest_DB)} backtest positions inserted in DB", "title")
             except Exception as e:
@@ -269,7 +269,6 @@ class Timeframe_Class:
                 # Check if any high price is >= the DP's Low price
                 open_hits = np.flatnonzero(high_series[index:] >= aDP.Low.price)
                 if open_hits.size != 0:
-                    self.dps_to_update.append((The_index_DP, 0))
                     entry_idx = index + open_hits[0]
                     lows = low_series[entry_idx:]
                     highs = high_series[entry_idx:]
@@ -277,7 +276,9 @@ class Timeframe_Class:
                     sl_hits = np.flatnonzero(highs >= aDP.High.price)
                     sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
                     if sl_idx:
-                       lows = low_series[entry_idx:sl_idx]
+                        lows = low_series[entry_idx:sl_idx]
+                        self.dps_to_update.append((The_index_DP, 0))
+                       
 
                     if lows.size == 0:
                         max_rr = -1
@@ -286,13 +287,6 @@ class Timeframe_Class:
 
                     self.inserting_BackTest_DB.append((
                         The_index_DP,
-                        "Sell Limit",
-                        aDP.Low.price,
-                        aDP.High.price,
-                        -1,
-                        time_series[entry_idx],
-                        -1,
-                        -1,
                         max_rr
                     ))
                 else:
@@ -302,7 +296,6 @@ class Timeframe_Class:
                 # Check if any low price is <= the DP's High price
                 open_hits = np.flatnonzero(low_series[index:] <= aDP.High.price)
                 if open_hits.size != 0:
-                    self.dps_to_update.append((The_index_DP, 0))
                     entry_idx = index + open_hits[0]
                     lows = low_series[entry_idx:]
                     highs = high_series[entry_idx:]
@@ -310,7 +303,8 @@ class Timeframe_Class:
                     sl_hits = np.flatnonzero(lows <= aDP.Low.price)
                     sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
                     if sl_idx:
-                       highs = high_series[entry_idx:sl_idx]
+                        highs = high_series[entry_idx:sl_idx]
+                        self.dps_to_update.append((The_index_DP, 0))
                     
                     if highs.size == 0:
                         max_rr = -1
@@ -319,13 +313,6 @@ class Timeframe_Class:
 
                     self.inserting_BackTest_DB.append((
                         The_index_DP,
-                        "Buy Limit",
-                        aDP.High.price,
-                        aDP.Low.price,
-                        -1,
-                        time_series[entry_idx],
-                        -1,
-                        -1,
                         max_rr
                     ))
                 else:
@@ -411,7 +398,8 @@ class Timeframe_Class:
 
                     new_opened_positions += 1
                     print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
-        
+                    self.CMySQL_DataBase.Traded_DP_Set.add(The_index)
+                     
         try:
             await self.CMySQL_DataBase._insert_positions_batch(inserting_positions_DB)
             if new_opened_positions:
