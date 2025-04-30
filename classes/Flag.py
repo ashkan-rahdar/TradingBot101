@@ -61,7 +61,7 @@ class Flag_Class:
             self.flag_type: typing.Literal["Bullish", "Bearish","Undefined"] = The_flag_type
             self.high = The_high
             self.low = The_low
-            self.duration = The_end_index - (The_low.index if The_flag_type == "Bearish" else The_high.index)
+            self.length = The_end_index - (The_low.index if The_flag_type == "Bearish" else The_high.index)
             self.Start_index = The_start_index
             self.End_index = The_end_index
             self.End_time = The_data_in_flag['time'][The_end_index]
@@ -121,6 +121,11 @@ class Flag_Class:
                 if self.FTC.length is not None:
                     self.FTC.related_DP_indexes.append(self.EL.ID_generator_Function())
                     self.FTC.related_DP_indexes.append(self.MPL.ID_generator_Function())
+                    
+                    if self.flag_type == "Bullish":
+                        self.FTC.Is_related_DP_used = self.FTC.High.price > self.EL.Low.price
+                    else:
+                        self.FTC.Is_related_DP_used = self.FTC.Low.price <  self.EL.High.price
                 
                 self.EL.related_DP_indexes.append(self.MPL.ID_generator_Function())
             if self.MPL.length is not None:
@@ -207,8 +212,8 @@ class Flag_Class:
         max_weight  = config["trading_configs"]["risk_management"]["max_wieght"] 
         # duration of flag
 
-        if(self.duration / 15 < max_weight): 
-            weights.append(self.duration / 15)
+        if(self.length / 15 < max_weight): 
+            weights.append(self.length / 15)
         else: 
             weights.append(max_weight)
         
@@ -221,17 +226,22 @@ class Flag_Class:
             aDP.number_used_candle = len(filtered_lows)
             if not filtered_lows.empty:
                 aDP.used_ratio = (aDP.High.price - filtered_lows.min()) / (aDP.High.price - aDP.Low.price)
+                aDP.Is_used_half = aDP.used_ratio >= 0.5
+                aDP.Is_golfed =  aDP.Is_golfed >= 1
         elif aDP.trade_direction == "Bearish":
             mask = (Dataset['high'] >= aDP.Low.price) & (Dataset['high'] <= aDP.High.price)
             filtered_highs = Dataset['high'][mask]
             aDP.number_used_candle = len(filtered_highs)
             if not filtered_highs.empty:
                 aDP.used_ratio = (filtered_highs.max() - aDP.Low.price) / (aDP.High.price - aDP.Low.price)
+                aDP.Is_used_half = aDP.used_ratio >= 0.5
+                aDP.Is_golfed =  aDP.Is_golfed >= 1
                 
         aDP.ratio_to_flag = (aDP.High.price - aDP.Low.price) / (self.high.price - self.low.price)
+        aDP.parent_length = self.length
         return
     
     def __repr__(self):
         return (f"The Detected Flag: Type: {self.flag_type}, High: {self.high}, Low: {self.low}, "
                 f"Start index: {self.Start_index}, End index: {self.End_index}, EL: {self.EL}, "
-                f"Duration: {self.duration}, FTC: {self.FTC}")
+                f"Duration: {self.length}, FTC: {self.FTC}")

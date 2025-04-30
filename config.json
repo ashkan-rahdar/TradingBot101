@@ -11,8 +11,10 @@
         "asset": "EURUSD",
 
         "risk_management":{
-            "R" : 0.1,
-            "max_wieght": 4
+            "MIN_Risk" : 0.1,
+            "MIN_Prob": 0.80,
+            "MAX_Risk": 4,
+            "max_wieght": 10000000
         }
     },
     "runtime":{
@@ -21,6 +23,6 @@
             "password": "ashkan"
         }, 
         "Another_function_syntax": "ashkan1",
-        "Able_to_Open_positions": false
+        "Able_to_Open_positions": true
     }
 }

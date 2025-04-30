@@ -5,7 +5,11 @@ import json
 import asyncio
 import bisect
 import numpy as np
-import datetime
+import datetime  # noqa: F401
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score, brier_score_loss
+from catboost import CatBoostClassifier, Pool
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -20,6 +24,10 @@ from functions.logger import print_and_logging_Function
 from functions.run_with_retries import run_with_retries_Function
 from functions.Reaction_detector import main_reaction_detector
 from classes.Database import Database_Class
+
+TARGET_PROB = config["trading_configs"]["risk_management"]["MIN_Prob"]
+MAX_RISK = config["trading_configs"]["risk_management"]["MAX_Risk"]
+MIN_RISK = config["trading_configs"]["risk_management"]["MIN_Risk"]
 
 class Timeframe_Class:
     """
@@ -177,10 +185,10 @@ class Timeframe_Class:
         try:
             # Initialize list to store DPs that need to be updated
             self.dps_to_update : list[tuple[str, float]] = []
-            self.Tradeable_DPs: list[tuple[DP_Parameteres_Class, int]] = []
+            self.Tradeable_DPs: list[str] = []
             self.inserting_BackTest_DB: list[tuple[str, float]] = []
             
-            valid_DPs = await self.CMySQL_DataBase._get_tradeable_DPs_Function()
+            valid_DPs = await self.CMySQL_DataBase._get_update_DPlist_Function()
             
             # Pre-calculate these values once
             self.DataSet['time'] = self.DataSet['time'].astype('datetime64[ns]')
@@ -261,7 +269,7 @@ class Timeframe_Class:
             
             if index >= len(time_series):
                 # raise Exception(f"No Valid Time entered in a {The_index_DP} DP")
-                self.Tradeable_DPs.append((aDP, The_index_DP))
+                self.Tradeable_DPs.append(The_index_DP)
                 return
             
             # Use NumPy's efficient array operations instead of loops
@@ -290,7 +298,7 @@ class Timeframe_Class:
                         max_rr
                     ))
                 else:
-                    self.Tradeable_DPs.append((aDP, The_index_DP))
+                    self.Tradeable_DPs.append(The_index_DP)
                     
             elif aDP.trade_direction == "Bullish":
                 # Check if any low price is <= the DP's High price
@@ -316,10 +324,146 @@ class Timeframe_Class:
                         max_rr
                     ))
                 else:
-                    self.Tradeable_DPs.append((aDP, The_index_DP))
+                    self.Tradeable_DPs.append(The_index_DP)
 
         except Exception as e:
             raise Exception(f"validating the {The_index_DP} DP: {e}")
+    
+    async def ML_Main_Function(self):
+        RR_levels = np.arange(1.25, 5.1, 0.25)  # Range of test RRs
+        probs = []
+        self.Do_Trade_DpList : list[tuple[DP_Parameteres_Class, str, int, int]] = []
+
+        X_FTC, Y_FTC, X_EL, Y_EL, X_MPL, Y_MPL = await self.CMySQL_DataBase.Read_ML_table_Function()
+        FTC_models = self.RR_ML_Training(RR_levels, X_FTC, Y_FTC, "FTC")
+        DP_TradeList = await self.CMySQL_DataBase._get_tradeable_DPs_Function(self.Tradeable_DPs)
+        
+        for i in range(len(DP_TradeList)):
+            The_DP = DP_TradeList[i]
+            # print(The_DP)
+            if(The_DP.type != "FTC"): 
+                continue
+
+            probs = []
+            for rr in RR_levels:
+                model = FTC_models[rr]
+                prob = model.predict_proba(The_DP.to_model_input_Function())[0, 1]
+                probs.append(prob)
+
+            probs = np.array(probs)
+            reliable_idx = np.where(probs >= TARGET_PROB)[0]
+
+            if reliable_idx.size == 0:
+                continue
+            
+            best_rr_idx = reliable_idx[-1]
+            best_rr = RR_levels[best_rr_idx]
+            prob = probs[best_rr_idx]
+
+            Trade_Risk = ((prob - TARGET_PROB) / (1.0 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
+
+            # Now update the tuple
+            self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), Trade_Risk, best_rr))
+            
+        return
+
+    def RR_ML_Training(self, RR_values: np.ndarray, Input: pd.DataFrame, Output: pd.DataFrame, DP_type: str = "FTC") -> dict[float, CatBoostClassifier]:
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state=42)
+            categorical_features = ["Is_related_DP_used", "Is_golfed", "Is_used_half"]
+            
+            models: dict[float, CatBoostClassifier] = {}
+            metrics_train = {}
+            metrics_test = {}
+            
+            for rr in RR_values:
+                print_and_logging_Function("info", f"Training the {rr} model for {DP_type}", "title")
+                # Binary label for this RR
+                y_train_bin = (y_train >= rr).astype(int)
+                y_test_bin = (y_test >= rr).astype(int)
+
+                # Create CatBoost Pools
+                train_pool = Pool(X_train, label=y_train_bin, cat_features=categorical_features)
+                test_pool = Pool(X_test, label=y_test_bin, cat_features=categorical_features)
+                
+                # Model
+                model = CatBoostClassifier(
+                    iterations=1000,
+                    learning_rate=0.01,
+                    depth=6,
+                    loss_function='Logloss',
+                    eval_metric='AUC',
+                    l2_leaf_reg= 5,
+                    bootstrap_type='Bayesian',
+                    random_strength=5,
+                    boosting_type='Plain',
+                    early_stopping_rounds=50,
+                    verbose=100,
+                    allow_writing_files=False
+                )
+                model.fit(train_pool)
+                
+                # Metrics
+                y_train_prob = model.predict_proba(train_pool)[:, 1]
+                y_test_prob = model.predict_proba(test_pool)[:, 1]
+
+                auc_train = roc_auc_score(y_train_bin, y_train_prob)
+                brier_train = brier_score_loss(y_train_bin, y_train_prob)
+
+                auc_test = roc_auc_score(y_test_bin, y_test_prob)
+                brier_test = brier_score_loss(y_test_bin, y_test_prob)
+
+                models[rr] = model
+                metrics_train[rr] = {"AUC": auc_train, "Brier": brier_train}
+                metrics_test[rr] = {"AUC": auc_test, "Brier": brier_test}
+                
+            # Print results
+            print_and_logging_Function("info", "Training Metrics per RR Level:", "title")
+            for rr, score in metrics_train.items():
+                print_and_logging_Function("info", f"RR {rr:.2f} — Train AUC: {score['AUC']:.3f}, Train Brier: {score['Brier']:.3f}", "description")
+
+            print_and_logging_Function("info", "Testing Metrics per RR Level:", "title")
+            for rr, score in metrics_test.items():
+                print_and_logging_Function("info", f"RR {rr:.2f} — Test AUC: {score['AUC']:.3f}, Test Brier: {score['Brier']:.3f}", "description")
+                
+            # Backtest on test dataset
+            result_on_test = 0
+            succeeded_trades  = 0
+            totaltrades = 0
+            for i in range(len(X_test)):
+                probs = []
+                for rr in RR_values:
+                    model = models[rr]
+                    prob = model.predict_proba(X_test.iloc[[i]])[0, 1]
+                    probs.append(prob)
+
+                probs = np.array(probs)
+                reliable_idx = np.where(probs >= TARGET_PROB)[0]
+
+                if reliable_idx.size > 0:
+                    best_rr_idx = reliable_idx[-1]
+                    best_rr = RR_values[best_rr_idx]
+                    prob = probs[best_rr_idx]
+                else:
+                    best_rr = 0.0
+                    prob = 0.0
+
+                Trade_Risk = ((prob - TARGET_PROB) / (1.0 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
+
+                if best_rr != 0:
+                    if y_test.iloc[i].item() >= best_rr:
+                        result_on_test += Trade_Risk*best_rr
+                        succeeded_trades += 1
+                        totaltrades += 1
+                    else:
+                        result_on_test -= Trade_Risk
+                        totaltrades += 1
+            
+            winrate = succeeded_trades / totaltrades
+            print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test} percent profit with the {winrate} winrate in {totaltrades} trades", "title")
+            return models
+        except RuntimeError as The_error:
+            print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{The_error}", "title")
     
     async def Update_Positions_Function(self):
         """
@@ -364,17 +508,59 @@ class Timeframe_Class:
           and their indices.
         """
         
+        def calculate_trade_volume(entry_price: float, stop_loss_price: float, risk_percent: float) -> float:
+            symbol = config["trading_configs"]["asset"]
+            account_info = CMetatrader_Module.mt.account_info()
+            if account_info is None:
+                raise Exception("Failed to fetch account info.")
+
+            balance = account_info.balance
+            risk_amount = (risk_percent / 100) * balance
+
+            symbol_info = CMetatrader_Module.mt.symbol_info(symbol)
+            if symbol_info is None:
+                raise Exception(f"Symbol {symbol} not found.")
+
+            tick_size = symbol_info.trade_tick_size
+            tick_value = symbol_info.trade_tick_value
+            volume_min = symbol_info.volume_min
+            volume_max = symbol_info.volume_max
+            volume_step = symbol_info.volume_step
+
+            if tick_size == 0 or tick_value == 0:
+                raise Exception(f"Invalid tick size or tick value for {symbol}.")
+
+            # === Calculate loss per lot dynamically ===
+            sl_distance_in_price = abs(entry_price - stop_loss_price)
+            if sl_distance_in_price == 0:
+                raise Exception("Stop Loss distance cannot be zero.")
+
+            # loss for 1 lot
+            loss_per_lot = (sl_distance_in_price / tick_size) * tick_value
+
+            if loss_per_lot == 0:
+                raise Exception("Loss per lot is zero, cannot divide.")
+
+            # === Calculate the volume ===
+            volume = risk_amount / loss_per_lot
+
+            # === Round properly ===
+            volume = max(volume_min, min(volume_max, round(volume / volume_step) * volume_step))
+            return volume
+        
         new_opened_positions = 0
         inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
 
-        for aDP, The_index in self.Tradeable_DPs:
+        for aDP, The_index, Estimated_Risk, Estimated_TP in self.Do_Trade_DpList:
             if The_index not in self.CMySQL_DataBase.Traded_DP_Set:
                 result = CMetatrader_Module.Open_position_Function(
                     order_type="Buy Limit" if aDP.trade_direction == "Bullish" else "Sell Limit",
-                    vol=0.01,
+                    vol= calculate_trade_volume(aDP.High.price if aDP.trade_direction == "Bullish" else aDP.Low.price, 
+                                                     aDP.Low.price if aDP.trade_direction == "Bullish" else aDP.High.price, 
+                                                     Estimated_Risk),
                     price=aDP.High.price if aDP.trade_direction == "Bullish" else aDP.Low.price,
                     sl=aDP.Low.price if aDP.trade_direction == "Bullish" else aDP.High.price,
-                    tp=aDP.High.price + 2 * (aDP.High.price - aDP.Low.price) if aDP.trade_direction == "Bullish" else aDP.Low.price - 2 * (aDP.High.price - aDP.Low.price),
+                    tp= Estimated_TP,
                 )
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE:
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
@@ -406,5 +592,5 @@ class Timeframe_Class:
                 print_and_logging_Function("info", f"{new_opened_positions} New positions opened and inserted in DB", "title")
         except Exception as e:
             print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
-
+            
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

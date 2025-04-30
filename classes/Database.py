@@ -4,6 +4,7 @@ import sys
 import os
 import datetime
 import aiomysql
+import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -104,7 +105,11 @@ class Database_Class:
                 Used_Ratio FLOAT NULL,
                 Related_DP_1 VARCHAR(255) NULL,
                 Related_DP_2 VARCHAR(255) NULL,
-                Result FLOAT NOT Null DEFAULT 0
+                Is_related_DP_used BOOL DEFAULT FALSE,
+                Is_golfed BOOL DEFAULT FALSE,
+                Is_used_half BOOL DEFAULT FALSE,
+                parent_length INT NULL,
+                Result FLOAT NOT NULL DEFAULT 0
             )
             """,
             f"""
@@ -223,7 +228,8 @@ class Database_Class:
                             Important_DPs_values.append((
                                 flag.FTC.ID_generator_Function(), flag.FTC.type, flag.FTC.High.ID_generator_Function(), flag.FTC.Low.ID_generator_Function(),
                                 flag.FTC.weight, flag.FTC.first_valid_trade_time, flag.FTC.trade_direction, flag.FTC.length,
-                                flag.FTC.ratio_to_flag, flag.FTC.number_used_candle, flag.FTC.used_ratio, related_DP_1, related_DP_2
+                                flag.FTC.ratio_to_flag, flag.FTC.number_used_candle, flag.FTC.used_ratio, related_DP_1, related_DP_2, int(flag.FTC.Is_related_DP_used),
+                                int(flag.FTC.Is_golfed), int(flag.FTC.Is_used_half), flag.FTC.parent_length
                             ))
                             flag_point_values.append((
                                 flag.FTC.High.ID_generator_Function(), flag.FTC.High.price, flag.FTC.High.time.strftime('%Y-%m-%d %H:%M:%S')
@@ -237,7 +243,8 @@ class Database_Class:
                             Important_DPs_values.append((
                                 flag.EL.ID_generator_Function(), flag.EL.type, flag.EL.High.ID_generator_Function(), flag.EL.Low.ID_generator_Function(),
                                 flag.EL.weight, flag.EL.first_valid_trade_time, flag.EL.trade_direction, flag.EL.length,
-                                flag.EL.ratio_to_flag, flag.EL.number_used_candle, flag.EL.used_ratio, flag.EL.related_DP_indexes[0], None
+                                flag.EL.ratio_to_flag, flag.EL.number_used_candle, flag.EL.used_ratio, flag.EL.related_DP_indexes[0], None, int(flag.EL.Is_related_DP_used),
+                                int(flag.EL.Is_golfed), int(flag.EL.Is_used_half), flag.EL.parent_length
                             ))
                             flag_point_values.append((
                                 flag.EL.High.ID_generator_Function(), flag.EL.High.price, flag.EL.High.time.strftime('%Y-%m-%d %H:%M:%S')
@@ -251,7 +258,8 @@ class Database_Class:
                             Important_DPs_values.append((
                                 flag.MPL.ID_generator_Function(), flag.MPL.type, flag.MPL.High.ID_generator_Function(), flag.MPL.Low.ID_generator_Function(),
                                 flag.MPL.weight, flag.MPL.first_valid_trade_time, flag.MPL.trade_direction, flag.MPL.length,
-                                flag.MPL.ratio_to_flag, flag.MPL.number_used_candle, flag.MPL.used_ratio, None, None
+                                flag.MPL.ratio_to_flag, flag.MPL.number_used_candle, flag.MPL.used_ratio, None, None, int(flag.MPL.Is_related_DP_used),
+                                int(flag.MPL.Is_golfed), int(flag.MPL.Is_used_half), flag.MPL.parent_length
                             ))
                             flag_point_values.append((
                                 flag.MPL.High.ID_generator_Function(), flag.MPL.High.price, flag.MPL.High.time.strftime('%Y-%m-%d %H:%M:%S')
@@ -281,8 +289,9 @@ class Database_Class:
                     await cursor.executemany(
                         f"""INSERT INTO {self.important_dps_table_name} 
                             (id, type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction, length, 
-                            Flag_Ratio, NO_Used_Candles, Used_Ratio, Related_DP_1, Related_DP_2)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            Flag_Ratio, NO_Used_Candles, Used_Ratio, Related_DP_1, Related_DP_2, Is_related_DP_used,
+                            Is_golfed, Is_used_half, parent_length)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON DUPLICATE KEY UPDATE id = id""",
                         Important_DPs_values
                     )
@@ -368,7 +377,7 @@ class Database_Class:
             print_and_logging_Function("error", f"Error in batch updating DP Results: {e}", "title")
             await conn.rollback()  # Rollback if there's an error
             
-    async def _get_tradeable_DPs_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
+    async def _get_update_DPlist_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
         """
         Asynchronously fetches tradeable Decision Points (DPs) from the database.
         This function retrieves all important DPs with a weight greater than 0, 
@@ -404,56 +413,192 @@ class Database_Class:
         try:
             async with self.db_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
-                    # Get all important DPs where weight > 0
+                    # Step 1: Get important DPs
                     await cursor.execute(f"""
-                        SELECT id, type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction 
-                        FROM {self.important_dps_table_name} WHERE weight > 0
+                        SELECT id, type, High_Point, Low_Point, weight, first_valid_trade_time, trade_direction,
+                            length, Flag_Ratio, NO_Used_Candles, Used_Ratio, Related_DP_1, Related_DP_2,
+                            Is_related_DP_used, Is_golfed, Is_used_half, parent_length
+                        FROM {self.important_dps_table_name}
+                        WHERE weight > 0
                     """)
+                    dp_columns = [desc[0] for desc in cursor.description]
                     dp_results = await cursor.fetchall()
 
-                    # Prepare the list of flag_ids from High_Point and Low_Point
+                    # Step 2: Fetch Flag Points
                     flag_ids = [row[2] for row in dp_results if row[2]] + [row[3] for row in dp_results if row[3]]
-
                     flag_points = {}
                     if flag_ids:
-                        # Fetch all flag points in one go
                         await cursor.execute(f"""
-                            SELECT id, price, time FROM {self.flag_points_table_name} WHERE id IN ({','.join(['%s'] * len(flag_ids))})
+                            SELECT id, price, time 
+                            FROM {self.flag_points_table_name} 
+                            WHERE id IN ({','.join(['%s'] * len(flag_ids))})
                         """, flag_ids)
-                        # Create a dictionary for fast lookup
                         flag_points = {str(row[0]): FlagPoint_Class(price=row[1], time=row[2]) for row in await cursor.fetchall()}
 
-                    # Get existing traded dp ids to avoid duplication
-                    existing_dp_ids = set()
-                    await cursor.execute(f"""
-                        SELECT DISTINCT Traded_DP FROM {self.Positions_table_name}
-                    """)
+                    # Step 3: Fetch existing traded DPs
+                    await cursor.execute(f"SELECT DISTINCT Traded_DP FROM {self.Positions_table_name}")
                     existing_dp_ids = {row[0] for row in await cursor.fetchall()}
 
-                    # Build DP objects and return them, only for DPs that are not already in the Positions table
-                    dps = []
+                    # Step 4: Fetch id -> Result mapping
+                    await cursor.execute(f"""
+                        SELECT id, Result
+                        FROM {self.important_dps_table_name}
+                        WHERE Result != 0
+                    """)
+                    result_columns = [desc[0] for desc in cursor.description]
+                    rows = await cursor.fetchall()
+                    full_df = pd.DataFrame(rows, columns=result_columns)
+                    id_to_result = dict(zip(full_df['id'], full_df['Result']))
+
+                    # Step 5: Replace Related_DP_1 and Related_DP_2
+                    updated_dp_results = []
                     for row in dp_results:
-                        dp_id, dp_type, high_id, low_id, weight, first_valid_time, trade_direction = row
+                        row = dict(zip(dp_columns, row))
+                        if row.get('Related_DP_1') in id_to_result:
+                            row['Related_DP_1'] = id_to_result[row['Related_DP_1']]
+                        else:
+                            row['Related_DP_1'] = None
+                        if row.get('Related_DP_2') in id_to_result:
+                            row['Related_DP_2'] = id_to_result[row['Related_DP_2']]
+                        else:
+                            row['Related_DP_2'] = None
+                        updated_dp_results.append(row)
+
+                    # Step 6: Build DP objects
+                    dps = []
+                    for row in updated_dp_results:
+                        dp_id = row['id']
                         if dp_id in existing_dp_ids:
-                            continue  # Skip DP if it already exists in the Positions table
-                        
-                        high_point = flag_points.get(str(high_id)) if high_id else None
-                        low_point = flag_points.get(str(low_id)) if low_id else None
+                            continue  # Already exists
+
+                        high_point = flag_points.get(str(row['High_Point'])) if row['High_Point'] else None
+                        low_point = flag_points.get(str(row['Low_Point'])) if row['Low_Point'] else None
                         dp = DP_Parameteres_Class(
-                            type=dp_type, 
+                            type=row['type'], 
                             High=high_point, 
                             Low=low_point, 
-                            weight=weight, 
-                            first_valid_trade_time=first_valid_time, 
-                            trade_direction=trade_direction
+                            weight=row['weight'], 
+                            first_valid_trade_time=row['first_valid_trade_time'], 
+                            trade_direction=row['trade_direction']
                         )
+                        dp.length = row['length']
+                        dp.ratio_to_flag = row['Flag_Ratio']
+                        dp.number_used_candle = row['NO_Used_Candles']
+                        dp.used_ratio = row['Used_Ratio']                            
+                        dp.Is_related_DP_used = row['Is_related_DP_used']
+                        dp.Is_golfed = row['Is_golfed']
+                        dp.Is_used_half = row['Is_used_half']
+                        dp.parent_length = row['parent_length']
+                        dp.related_DP_indexes.append(row['Related_DP_1'])
+                        dp.related_DP_indexes.append(row['Related_DP_2'])
+
                         dps.append((dp, dp_id))
 
                     return dps
         except Exception as e:
             print_and_logging_Function("error", f"Error in fetching tradeable DPs: {e}", "title")
             return []
-  
+    
+    async def _get_tradeable_DPs_Function(self, dp_ids: list[str]) -> list[DP_Parameteres_Class]:
+        """
+        Given a list of important-DP IDs, load their full parameters (including
+        substituted Related_DP_1/2 Results) and return a list of DP_Parameteres_Class.
+        """
+        if not dp_ids:
+            return []
+
+        try:
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # 1) Fetch the requested DP rows
+                    sql = f"""
+                        SELECT id, type, High_Point, Low_Point, weight, first_valid_trade_time,
+                               trade_direction, length, Flag_Ratio, NO_Used_Candles,
+                               Used_Ratio, Related_DP_1, Related_DP_2,
+                               Is_related_DP_used, Is_golfed, Is_used_half, parent_length
+                        FROM {self.important_dps_table_name}
+                        WHERE id IN ({','.join(['%s']*len(dp_ids))})
+                    """
+                    await cursor.execute(sql, dp_ids)
+                    dp_columns = [c[0] for c in cursor.description]
+                    dp_rows = await cursor.fetchall()
+                    if not dp_rows:
+                        return []
+
+                    # 2) Build id -> Result map for ALL non-zero Results
+                    await cursor.execute(f"""
+                        SELECT id, Result
+                        FROM {self.important_dps_table_name}
+                        WHERE Result != 0
+                    """)
+                    res_rows = await cursor.fetchall()
+                    id_to_result = {r[0]: r[1] for r in res_rows}
+
+                    # 3) Collect all High_Point/Low_Point IDs for flag lookup
+                    flag_ids = []
+                    for row in dp_rows:
+                        hp, lp = row[2], row[3]
+                        if hp: 
+                            flag_ids.append(hp)
+                        if lp: 
+                            flag_ids.append(lp)
+                    flag_ids = list(set(flag_ids))
+                    flag_points = {}
+                    if flag_ids:
+                        sql_fp = f"""
+                            SELECT id, price, time
+                            FROM {self.flag_points_table_name}
+                            WHERE id IN ({','.join(['%s']*len(flag_ids))})
+                        """
+                        await cursor.execute(sql_fp, flag_ids)
+                        for fid, price, when in await cursor.fetchall():
+                            flag_points[fid] = FlagPoint_Class(price=price, time=when)
+
+                    # 4) Substitute Related_DP_1/2 → actual Result or None
+                    updated = []
+                    for row in dp_rows:
+                        rec = dict(zip(dp_columns, row))
+                        for fld in ('Related_DP_1','Related_DP_2'):
+                            rid = rec[fld]
+                            rec[fld] = id_to_result.get(rid) if rid in id_to_result else None
+                        updated.append(rec)
+
+                    # 5) Build DP_Parameteres_Class objects
+                    results = []
+                    for rec in updated:
+                        dp = DP_Parameteres_Class(
+                            type=rec['type'],
+                            High=flag_points.get(rec['High_Point']),
+                            Low =flag_points.get(rec['Low_Point']),
+                            weight=rec['weight'],
+                            first_valid_trade_time=rec['first_valid_trade_time'],
+                            trade_direction=rec['trade_direction']
+                        )
+                        # assign numeric/flag fields
+                        dp.length              = rec['length']
+                        dp.ratio_to_flag       = rec['Flag_Ratio']
+                        dp.number_used_candle  = rec['NO_Used_Candles']
+                        dp.used_ratio          = rec['Used_Ratio']
+                        dp.Is_related_DP_used  = rec['Is_related_DP_used']
+                        dp.Is_golfed           = rec['Is_golfed']
+                        dp.Is_used_half        = rec['Is_used_half']
+                        dp.parent_length       = rec['parent_length']
+                        # append the substituted Result‐values for related DPs
+                        dp.related_DP_indexes.append(rec['Related_DP_1'])
+                        dp.related_DP_indexes.append(rec['Related_DP_2'])
+
+                        results.append(dp)
+
+                    return results
+
+        except Exception as e:
+            print_and_logging_Function(
+                "error",
+                f"Error in fetch_DPs_by_id for IDs {dp_ids}: {e}",
+                "title"
+            )
+            return []
+
     async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]):
         """
         Asynchronously inserts a batch of trading position records into the database.
@@ -502,3 +647,51 @@ class Database_Class:
                     return
         except Exception as e:
             raise Exception(f"Error inserting batch positions: {e}")
+        
+    async def Read_ML_table_Function(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        try:
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # Fetch all rows
+                    await cursor.execute(f"""
+                        SELECT id, type, length, Flag_Ratio, NO_Used_Candles,
+                            Used_Ratio, Related_DP_1, Related_DP_2, Is_related_DP_used,
+                            Is_golfed, Is_used_half, parent_length, Result
+                        FROM {self.important_dps_table_name}
+                        WHERE Result != 0
+                    """)
+                    rows = await cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    
+                    # Convert to DataFrame
+                    full_df = pd.DataFrame(rows, columns=columns)
+
+                    # Build a dictionary for fast lookup of id -> Result
+                    id_to_result = dict(zip(full_df['id'], full_df['Result']))
+
+                    # Now, prepare the Related DP results
+                    full_df['Related_DP_1'] = full_df['Related_DP_1'].apply(
+                        lambda x: id_to_result.get(x, 0) if pd.notnull(x) else None
+                    )
+                    full_df['Related_DP_2'] = full_df['Related_DP_2'].apply(
+                        lambda x: id_to_result.get(x, 0) if pd.notnull(x) else None
+                    )
+
+                    # Prepare Input and Output
+                    FTC_full_df = full_df[full_df['type'] == 'FTC'].reset_index(drop=True)
+                    EL_full_df = full_df[full_df['type'] == 'EL'].reset_index(drop=True)
+                    MPL_full_df = full_df[full_df['type'] == 'MPL'].reset_index(drop=True)
+
+                    FTC_Input = FTC_full_df.drop(columns=['Result', 'id', 'type'])
+                    FTC_Output = FTC_full_df['Result']
+                    
+                    EL_Input = EL_full_df.drop(columns=['Result', 'id', 'type'])
+                    EL_Output = EL_full_df['Result']
+                    
+                    MPL_Input = MPL_full_df.drop(columns=['Result', 'id', 'type'])
+                    MPL_Output = MPL_full_df['Result']
+                    
+                    return FTC_Input, FTC_Output, EL_Input, EL_Output, MPL_Input, MPL_Output
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in fetching ML Dataset: {e}", "title")
+            return pd.DataFrame(), pd.DataFrame()

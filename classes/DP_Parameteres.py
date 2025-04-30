@@ -86,7 +86,12 @@ class DP_Parameteres_Class:
         self.used_ratio = 0
         
         self.related_DP_indexes = []
-
+        
+        self.Is_related_DP_used : bool = False
+        self.Is_golfed : bool = False
+        self.Is_used_half : bool = False
+        self.parent_length : int = 0
+        
         self.ID_generator_Function()
 
     def ID_generator_Function(self):
@@ -99,10 +104,24 @@ class DP_Parameteres_Class:
     def length_cal_Function(self):
         self.length = int(abs(self.High.time - self.Low.time)/ pd.Timedelta("1min"))
         
+    def to_model_input_Function(self) -> pd.DataFrame:
+        return pd.DataFrame([{
+            "length":             self.length,
+            "Flag_Ratio":         self.ratio_to_flag,
+            "NO_Used_Candles":    self.number_used_candle,
+            "Used_Ratio":         self.used_ratio,
+            "Related_DP_1":       self.related_DP_indexes[0],
+            "Related_DP_2":       self.related_DP_indexes[1],
+            "Is_related_DP_used": self.Is_related_DP_used,
+            "Is_golfed":          self.Is_golfed,
+            "Is_used_half":       self.Is_used_half,
+            "parent_length":      self.parent_length
+        }])
+
     def __repr__(self):
         return (f"DP_Parameteres_Class(type={self.type}, High={self.High}, Low={self.Low}, "
                 f"weight={self.weight}, first_valid_trade_time={self.first_valid_trade_time}, "
                 f"trade_direction={self.trade_direction}, " f"length= {self.length}, "
                 f"ratio to flag = {self.ratio_to_flag}, " f"number used candle= {self.number_used_candle}, "
                 f"used ratio= {self.used_ratio}, " f"related DP indexes= {self.related_DP_indexes})"
-                "______________________________________")
+                "\n")

@@ -153,18 +153,29 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
         CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
 
         # Step 2: Detect Flags
-        await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
+        try:
+            await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
+        except RuntimeError as The_error:
+            print_and_logging_Function("critical", f"Critical failure in flag detection {The_timeframe}: {The_error}", "title")
 
         # step 3: Validate DPs and Flags
-        await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
-        
-        # step 4: Development
-        # await run_with_retries_Function(CTimeFrames[The_index].development, CMetatrader_Module.mt.account_info())
+        try:
+            await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
+        except RuntimeError as The_error:
+            print_and_logging_Function("critical", f"Critical failure in validating DPs {The_timeframe}: {The_error}", "title")
 
+        # step 4: Train ML
+        try:
+            await run_with_retries_Function(CTimeFrames[The_index].ML_Main_Function)
+        except RuntimeError as The_error:
+            print_and_logging_Function("critical", f"Critical failure in ML {The_timeframe}: {The_error}", "title")
+            
+        # step 5: Update and open Positions
         try:
             await run_with_retries_Function(CTimeFrames[The_index].Update_Positions_Function)
         except RuntimeError as The_error:
-            print_and_logging_Function("critical", f"Critical failure in updating Positions: {The_error}", "title")
+            print_and_logging_Function("critical", f"Critical failure in updating Positions {The_timeframe}: {The_error}", "title")
+
 
 
         profiler.disable()
