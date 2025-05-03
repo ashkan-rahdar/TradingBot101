@@ -551,17 +551,24 @@ class Timeframe_Class:
         new_opened_positions = 0
         inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
 
-        for aDP, The_index, Estimated_Risk, Estimated_TP in self.Do_Trade_DpList:
+        for aDP, The_index, Estimated_Risk, Estimated_RR in self.Do_Trade_DpList:
             if The_index not in self.CMySQL_DataBase.Traded_DP_Set:
-                result = CMetatrader_Module.Open_position_Function(
-                    order_type="Buy Limit" if aDP.trade_direction == "Bullish" else "Sell Limit",
-                    vol= calculate_trade_volume(aDP.High.price if aDP.trade_direction == "Bullish" else aDP.Low.price, 
-                                                     aDP.Low.price if aDP.trade_direction == "Bullish" else aDP.High.price, 
-                                                     Estimated_Risk),
-                    price=aDP.High.price if aDP.trade_direction == "Bullish" else aDP.Low.price,
-                    sl=aDP.Low.price if aDP.trade_direction == "Bullish" else aDP.High.price,
-                    tp= Estimated_TP,
-                )
+                if aDP.trade_direction == "Bullish":    
+                    result = CMetatrader_Module.Open_position_Function(
+                        order_type=     "Buy Limit",
+                        vol=            calculate_trade_volume(aDP.High.price, aDP.Low.price, Estimated_Risk),
+                        price=          aDP.High.price,
+                        sl=             aDP.Low.price,
+                        tp=             aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price),
+                    )
+                else:
+                    result = CMetatrader_Module.Open_position_Function(
+                        order_type=     "Sell Limit",
+                        vol=            calculate_trade_volume(aDP.Low.price, aDP.High.price, Estimated_Risk),
+                        price=          aDP.Low.price,
+                        sl=             aDP.High.price,
+                        tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
+                    )
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE:
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                 else:
