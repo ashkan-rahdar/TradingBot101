@@ -5,7 +5,8 @@ import json
 import asyncio
 import bisect
 import numpy as np
-import datetime  # noqa: F401
+import datetime
+import random
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss
@@ -118,6 +119,7 @@ class Timeframe_Class:
         global config
         self.CMySQL_DataBase = Database_Class(The_timeframe)
         self.detector = FlagDetector_Class(The_timeframe, self.CMySQL_DataBase)
+        self.RANDOM_STATE = 42
     
     def set_data_Function(self, aDataSet: pd.DataFrame):
         self.DataSet = aDataSet
@@ -338,6 +340,9 @@ class Timeframe_Class:
         FTC_models = self.RR_ML_Training(RR_levels, X_FTC, Y_FTC, "FTC")
         DP_TradeList = await self.CMySQL_DataBase._get_tradeable_DPs_Function(self.Tradeable_DPs)
         
+        if FTC_models.get(1.25) == -1:
+            return
+        
         for i in range(len(DP_TradeList)):
             The_DP = DP_TradeList[i]
             # print(The_DP)
@@ -364,12 +369,10 @@ class Timeframe_Class:
 
             # Now update the tuple
             self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), Trade_Risk, best_rr))
-            
-        return
 
     def RR_ML_Training(self, RR_values: np.ndarray, Input: pd.DataFrame, Output: pd.DataFrame, DP_type: str = "FTC") -> dict[float, CatBoostClassifier]:
         try:
-            X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state = self.RANDOM_STATE)
             categorical_features = ["Is_related_DP_used", "Is_golfed", "Is_used_half"]
             
             models: dict[float, CatBoostClassifier] = {}
@@ -461,6 +464,10 @@ class Timeframe_Class:
             
             winrate = succeeded_trades / totaltrades
             print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test} percent profit with the {winrate} winrate in {totaltrades} trades", "title")
+            if winrate <= 0.6 and result_on_test <= 0 :
+                models = {1.25: -1}
+                self.RANDOM_STATE = random.randint(10, 50)
+                print_and_logging_Function("warning", "Based on current data Bot is not profitable", "title")
             return models
         except RuntimeError as The_error:
             print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{The_error}", "title")
