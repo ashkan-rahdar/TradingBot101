@@ -106,15 +106,28 @@ class Metatrader_Module_Class:
         self.mt = MetaTrader5
         self.timeframe_mapping = {
             "M1": self.mt.TIMEFRAME_M1,
+            "M2": self.mt.TIMEFRAME_M2,
+            "M3": self.mt.TIMEFRAME_M3,
+            "M4": self.mt.TIMEFRAME_M4,
             "M5": self.mt.TIMEFRAME_M5,
+            "M6": self.mt.TIMEFRAME_M6,
+            "M10": self.mt.TIMEFRAME_M10,
+            "M12": self.mt.TIMEFRAME_M12,
             "M15": self.mt.TIMEFRAME_M15,
+            "M20": self.mt.TIMEFRAME_M20,
             "M30": self.mt.TIMEFRAME_M30,
             "H1": self.mt.TIMEFRAME_H1,
+            "H2": self.mt.TIMEFRAME_H2,
+            "H3": self.mt.TIMEFRAME_H3,
             "H4": self.mt.TIMEFRAME_H4,
+            "H6": self.mt.TIMEFRAME_H6,
+            "H8": self.mt.TIMEFRAME_H8,
+            "H12": self.mt.TIMEFRAME_H12,
             "D1": self.mt.TIMEFRAME_D1,
             "W1": self.mt.TIMEFRAME_W1,
             "MN1": self.mt.TIMEFRAME_MN1,
         }
+
         self.order_type_mapping = {
             "Buy": self.mt.ORDER_TYPE_SELL,
             "Sell": self.mt.ORDER_TYPE_SELL,
