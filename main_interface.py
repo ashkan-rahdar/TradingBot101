@@ -1,12 +1,14 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
+from tkinter.scrolledtext import ScrolledText
 import subprocess
 import threading
 import os
 import json
 import time
 import typing
-import datetime
+from datetime import datetime
+import parameters
 
 class TradingBotGUI_class:
 
@@ -22,7 +24,6 @@ class TradingBotGUI_class:
         self.password = tk.StringVar(None, "password", "password")
         self.authenticated = False
         self.bot_process = None
-        self.bot_running = False
         self.Is_custom_notbook_created = False
 
         # Load config from JSON file
@@ -199,7 +200,7 @@ class TradingBotGUI_class:
             previous_screen = self.screen_history.pop()
             
             # Don't add the current screen to history when going back
-            temp = self.current_screen
+            # temp = self.current_screen
             self.current_screen = ""
             
             # Show the previous screen
@@ -416,7 +417,8 @@ class TradingBotGUI_class:
             self.show_login_Function(False)
 
     def _create_custom_notebook_Function(self, parent: tk.Frame) -> ttk.Notebook:
-        if self.Is_custom_notbook_created: return ttk.Notebook(parent, style='Custom.TNotebook')
+        if self.Is_custom_notbook_created: 
+            return ttk.Notebook(parent, style='Custom.TNotebook')
         # Create a custom class by inheriting from ttk.Notebook
         style = ttk.Style()
         
@@ -551,7 +553,7 @@ class TradingBotGUI_class:
         continue_button.bind("<Leave>", lambda e: self.on_leave_Function(e, "#1A252F", 10))        
         continue_button.place(relx=0.9, rely=0.5, anchor="se")
     
-    def setup_account_tab_Function(self, parent: tk.Frame):
+    def setup_account_tab_Function(self, parent: ttk.Frame):
         """Setup the account info configuration tab"""
         frame = tk.Frame(parent, padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -654,7 +656,7 @@ class TradingBotGUI_class:
             width=30
         ).grid(row=5, column=1, pady=10, padx=5, sticky="w")
     
-    def setup_trading_tab_Function(self, parent: tk.Frame):
+    def setup_trading_tab_Function(self, parent: ttk.Frame):
         """Setup the trading settings configuration tab"""
         frame = tk.Frame(parent, padx=20, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -851,14 +853,14 @@ class TradingBotGUI_class:
         bot_nootbook.add(history_trades_tab, text="History")
         self.history_trades_tab_Function(history_trades_tab)
 
-    def bot_dashboard_tab_Function(self, parent: tk.Frame):
+    def bot_dashboard_tab_Function(self, parent: ttk.Frame):
         # Create a horizontal split for the upper and lower sections of the bot_frame
         upper_lower_split = tk.PanedWindow(parent, orient=tk.VERTICAL)
         upper_lower_split.pack(fill=tk.X, expand=True)
 
         # Upper section for the vertical split (same as before)
         upper_frame = tk.Frame(upper_lower_split, height=200)
-        upper_frame.pack_propagate(0)  # Prevent the frame from shrinking
+        upper_frame.pack_propagate(False)  # Prevent the frame from shrinking
         upper_lower_split.add(upper_frame)
 
         # Create a vertical split in the upper section
@@ -867,7 +869,7 @@ class TradingBotGUI_class:
 
         # Left frame for controls
         left_frame = tk.Frame(split_frame,width=600)
-        left_frame.pack_propagate(0)
+        left_frame.pack_propagate(False)
         left_frame.pack(fill=tk.X, expand=True)
         split_frame.add(left_frame)
         
@@ -892,7 +894,7 @@ class TradingBotGUI_class:
 
         # Left frame for controls
         left_frame = tk.Frame(split_frame,width=700)
-        left_frame.pack_propagate(0)
+        left_frame.pack_propagate(False)
         left_frame.pack(fill=tk.X, expand=True)
         split_frame.add(left_frame)
 
@@ -920,14 +922,14 @@ class TradingBotGUI_class:
         )
         self.monitor_error_thread.start()
 
-    def poistion_manager_tab_Function(self, parent: tk.Frame):
+    def poistion_manager_tab_Function(self, parent: ttk.Frame):
         # Create a horizontal split for the upper and lower sections of the bot_frame
         split = tk.PanedWindow(parent, orient=tk.VERTICAL)
         split.pack(fill=tk.X, expand=True)
 
         # Upper section for the vertical split (same as before)
         upper_frame = tk.Frame(split, height=600)
-        upper_frame.pack_propagate(0)  # Prevent the frame from shrinking
+        upper_frame.pack_propagate(False)  # Prevent the frame from shrinking
         split.add(upper_frame)
         self.create_positions_table_Function(upper_frame)
 
@@ -941,14 +943,14 @@ class TradingBotGUI_class:
             text="Some buttons to manage positions manualy"
         ).pack()
 
-    def history_trades_tab_Function(self, parent: tk.Frame):
+    def history_trades_tab_Function(self, parent: ttk.Frame):
         # Create a horizontal split for the upper and lower sections of the bot_frame
         split = tk.PanedWindow(parent, orient=tk.VERTICAL)
         split.pack(fill=tk.X, expand=True)
 
         # Upper section for the vertical split (same as before)
         upper_frame = tk.Frame(split, height=600)
-        upper_frame.pack_propagate(0)  # Prevent the frame from shrinking
+        upper_frame.pack_propagate(False)  # Prevent the frame from shrinking
         split.add(upper_frame)
         self.create_dashboard_Function(upper_frame)
 
@@ -981,7 +983,8 @@ class TradingBotGUI_class:
             fg="white",
             width=12,
             height=1,
-            relief="raised"
+            relief="raised",
+            cursor="hand2"
         )
         self.start_button.grid(row=0, column=0, padx=5, pady=5)
         
@@ -997,7 +1000,7 @@ class TradingBotGUI_class:
             height=1,
             state=tk.DISABLED,
             relief="flat",
-            cursor="hand2"
+            cursor="arrow"
         )
         self.stop_button.grid(row=0, column=1, padx=5, pady=5)
         
@@ -1027,7 +1030,8 @@ class TradingBotGUI_class:
             fg="white",
             width=12,
             height=1,
-            relief="raised"
+            relief="raised",
+            cursor="hand2"
         )
         self.settings_button.grid(row=1, column=1, padx=5, pady=5)
         
@@ -1062,7 +1066,7 @@ class TradingBotGUI_class:
         )
         runtime_label.grid(row=1, column=3, padx=5, pady=5, sticky="w")
 
-    def create_terminal_Function(self, parent_frame: tk.Frame, type_of_terminal:typing.Literal["Info", "Error"]) -> scrolledtext:
+    def create_terminal_Function(self, parent_frame: tk.Frame, type_of_terminal:typing.Literal["Info", "Error"]) -> ScrolledText:
         """Creates the terminal for bot output"""
         color = "#660000" if type_of_terminal == "Error" else "#002500"
         terminal_frame = tk.LabelFrame(parent_frame, text=f" {type_of_terminal} Terminal ", padx=5, pady=5, font=("Arial", 11), fg=color)
@@ -1099,14 +1103,14 @@ class TradingBotGUI_class:
         auto_scroll_cb.pack(side=tk.RIGHT, padx=5, pady=2)
 
         # Store the auto-scroll variable with the terminal
-        terminal.auto_scroll_var = auto_scroll_var
+        terminal.auto_scroll_var = auto_scroll_var # type: ignore
         
         terminal.pack(fill=tk.BOTH, expand=True)
         terminal.config(state=tk.DISABLED)
 
         return terminal
 
-    def clear_terminal_Function(self, terminal: scrolledtext):
+    def clear_terminal_Function(self, terminal: ScrolledText):
         """Clear the contents of the terminal"""
         terminal.config(state=tk.NORMAL)
         terminal.delete(1.0, tk.END)
@@ -1114,7 +1118,7 @@ class TradingBotGUI_class:
 
     def restart_bot_Function(self):
         """Restart the trading bot"""
-        if self.bot_running:
+        if parameters.bot_running:
             self.stop_bot_Function()
             # Wait a moment for the bot to fully stop
             self.root.after(1000, self.start_bot_Function)
@@ -1123,7 +1127,7 @@ class TradingBotGUI_class:
 
     def start_bot_Function(self):
         """Start the trading bot and capture its output"""
-        if not self.bot_running:
+        if not parameters.bot_running:
             self.append_to_terminal_Function(self.info_terminal,"Starting trading bot...", False)
             self.status_var.set("Starting...")
             self.status_indicator.config(fg="#f39c12")  # Yellow for starting
@@ -1138,6 +1142,7 @@ class TradingBotGUI_class:
             self.start_button.config(state=tk.DISABLED, cursor="arrow", relief="flat")
             self.stop_button.config(state=tk.NORMAL, cursor="hand2", relief="raised")
             self.settings_button.config(state=tk.DISABLED, cursor="arrow", relief="flat")
+            self.restart_button.config(state=tk.NORMAL, cursor="hand2", relief="raised")
             self.append_to_terminal_Function(self.info_terminal,"Started Trading bot!", False)
     
     def run_bot_Function(self):
@@ -1146,7 +1151,7 @@ class TradingBotGUI_class:
             # Ensure the script exists
             script_path = "d:/Trade/Bot/TradingBot101/main_backend.py"
             if not os.path.exists(script_path):
-                self.append_to_terminal_Function(f"Error: Script not found at {script_path}\n")
+                self.append_to_terminal_Function(self.info_terminal,f"Error: Script not found at {script_path}\n")
                 self.status_var.set("Error")
                 self.status_indicator.config(fg="#e74c3c")  # Red for error
                 self.reset_buttons_Function()
@@ -1165,7 +1170,7 @@ class TradingBotGUI_class:
                 creationflags=subprocess.CREATE_NO_WINDOW  # This prevents a console window from appearing
             )
             
-            self.bot_running = True
+            parameters.bot_running = True
             self.status_var.set("Running")
             self.status_indicator.config(fg="#27ae60")  # Green for running
             
@@ -1175,19 +1180,19 @@ class TradingBotGUI_class:
             self.update_runtime_thread.start()
             
         except Exception as e:
-            self.append_to_terminal_Function(f"Error: {str(e)}\n")
+            self.append_to_terminal_Function(self.error_terminal,f"Error: {str(e)}\n")
             self.status_var.set("Error")
             self.status_indicator.config(fg="#e74c3c")  # Red for error
             self.reset_buttons_Function()
-            self.bot_running = False
+            parameters.bot_running = False
 
     def stop_bot_Function(self):
         """Stop the running bot"""
-        if self.bot_running and self.bot_process:
+        if parameters.bot_running and self.bot_process:
             self.append_to_terminal_Function(terminal=self.info_terminal,text="Stopping trading bot...\n", timestamp=False)
             
             # Set the flag first to prevent further processing
-            self.bot_running = False
+            parameters.bot_running = False
             
             # Terminate the process
             self.bot_process.terminate()
@@ -1202,6 +1207,7 @@ class TradingBotGUI_class:
 
             # Update button states
             self.stop_button.config(state=tk.DISABLED, cursor="arrow", relief="flat")
+            self.restart_button.config(state=tk.DISABLED, cursor="arrow", relief="flat")
             self.start_button.config(state=tk.NORMAL, cursor="hand2", relief="raised")
             self.settings_button.config(state=tk.NORMAL, cursor="hand2", relief="raised")
 
@@ -1217,7 +1223,7 @@ class TradingBotGUI_class:
         # Reset the process reference
         self.bot_process = None
 
-    def append_to_terminal_Function(self, terminal: scrolledtext, text: str, timestamp: bool = True):
+    def append_to_terminal_Function(self, terminal: ScrolledText, text: str, timestamp: bool = True):
         """Append text to the terminal with optional timestamp"""
         terminal.config(state=tk.NORMAL)
         
@@ -1228,12 +1234,12 @@ class TradingBotGUI_class:
         terminal.insert(tk.END, text + "\n")
         
         # Auto-scroll if enabled
-        if terminal.auto_scroll_var.get():
+        if terminal.auto_scroll_var.get(): # type: ignore
             terminal.see(tk.END)
         
         terminal.config(state=tk.DISABLED)
     
-    def monitor_logs_Function(self, log_file_path: str, terminal: scrolledtext):
+    def monitor_logs_Function(self, log_file_path: str, terminal: ScrolledText):
         """Monitor a log file for changes and update the specified terminal"""
         # Make sure the log directory exists
         os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
@@ -1277,7 +1283,7 @@ class TradingBotGUI_class:
 
     def update_runtime_Function(self):
         """Update the runtime display"""
-        if self.bot_running:
+        if parameters.bot_running:
             elapsed = time.time() - self.start_time
             hours = int(elapsed // 3600)
             minutes = int((elapsed % 3600) // 60)
@@ -1323,7 +1329,7 @@ class TradingBotGUI_class:
         
         # Add scrollbar
         scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.positions_tree.yview)
-        self.positions_tree.configure(yscroll=scrollbar.set)
+        self.positions_tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.positions_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
@@ -1363,7 +1369,7 @@ class TradingBotGUI_class:
         if not selection:
             return
             
-        position_id = self.positions_tree.item(selection[0], "values")[0]
+        # position_id = self.positions_tree.item(selection[0], "values")[0]
         # Open a dialog to modify position parameters
         # ...
 
@@ -1376,18 +1382,6 @@ class TradingBotGUI_class:
         position_id = self.positions_tree.item(selection[0], "values")[0]
         self.send_command_Function(f"position_details {position_id}")
   
-    def update_status_from_file_Function(self):
-        """Update UI with status information from the bot"""
-        try:
-            with open(self.status_file, "r") as f:
-                status_data = json.load(f)
-                
-                # Update UI elements with status data
-                self.root.after(0, lambda: self.update_ui_with_status_Function(status_data))
-                
-        except Exception as e:
-            self.append_to_terminal_Function(f"Error reading status: {str(e)}\n")
-
     def update_ui_with_status_Function(self, status_data):
         """Update UI elements with status data from the bot"""
         try:
@@ -1413,10 +1407,10 @@ class TradingBotGUI_class:
             if "status" in status_data:
                 status = status_data["status"]
                 if status.get("message"):
-                    self.append_to_terminal_Function(f"[BOT] {status['message']}\n")
+                    self.append_to_terminal_Function(self.info_terminal,f"[BOT] {status['message']}\n")
                     
         except Exception as e:
-            self.append_to_terminal_Function(f"Error updating UI: {str(e)}\n")
+            self.append_to_terminal_Function(self.error_terminal,f"Error updating UI: {str(e)}\n")
 
     def create_command_interface_Function(self, parent_frame):
         """Create an interface for sending commands to the bot"""
@@ -1470,7 +1464,7 @@ class TradingBotGUI_class:
 
     def send_command_Function(self, command=None):
         """Send a command to the running bot process"""
-        if not self.bot_running or not self.bot_process:
+        if not parameters.bot_running or not self.bot_process:
             messagebox.showerror("Error", "Bot is not running")
             return
         
@@ -1480,7 +1474,7 @@ class TradingBotGUI_class:
             return
         
         # Log the command
-        self.append_to_terminal_Function(f"\n> Executing command: {cmd}\n")
+        self.append_to_terminal_Function(self.info_terminal,f"\n> Executing command: {cmd}\n")
         
         try:
             # There are multiple ways to send commands to the running process:
@@ -1500,7 +1494,7 @@ class TradingBotGUI_class:
             self.cmd_var.set("")
             
         except Exception as e:
-            self.append_to_terminal_Function(f"Error sending command: {str(e)}\n")
+            self.append_to_terminal_Function(self.info_terminal, f"Error sending command: {str(e)}\n", False)
 
     def create_dashboard_Function(self, parent_frame):
         """Create a dashboard to visualize trading data"""
@@ -1605,13 +1599,13 @@ class TradingBotGUI_class:
                 # Store the exception
                 result_container.append(e)
             finally:
-                self.root.after(0, lambda: reset_cursor_and_close(result))
+                self.root.after(0, lambda: reset_cursor_and_close())
 
         # Reset cursor and close window
-        def reset_cursor_and_close(result):
+        def reset_cursor_and_close():
             self.root.config(cursor="arrow")  # Reset cursor to normal
             loading_window.destroy()
-            return result
+            return
         
         # Start the thread
         thread = threading.Thread(target=run_function_in_thread)
@@ -1644,7 +1638,7 @@ class TradingBotGUI_class:
             # Show the loading overlay while running the close function
             self.show_loading_window_Function(close_app, title="Closing", message="Stoping necessary functions...")
 
-            if hasattr(self,'bot_running') and hasattr(self,'bot_process'):
+            if hasattr(self,'bot_process'):
                 self.show_loading_window_Function(self.stop_bot_Function,title="Closing", message="Stopping Bot...")
 
             # After cleanup is done, destroy the window

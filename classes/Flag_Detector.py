@@ -190,8 +190,7 @@ class FlagDetector_Class:
             The_low=FlagPoint_Class(price= low_of_flag, index= low_of_flag_index, time= The_dataset["time"][low_of_flag_index]),
             The_data_in_flag= The_dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
             The_start_index= start_of_flag_index,
-            The_end_index= end_of_flag_index,
-            The_start_FTC= end_of_flag_index)
+            The_end_index= end_of_flag_index)
         
         # The_local_tasks.append(asyncio.create_task(self.CDataBase.add_flag_Function(flag,self.DB_name_flags_table)))
         self.Detected_Flags.append(flag)
@@ -296,9 +295,7 @@ class FlagDetector_Class:
             The_low=FlagPoint_Class(price= low_of_flag, index= The_index, time= The_dataset["time"][The_index]),
             The_data_in_flag= The_dataset.iloc[start_of_flag_index:end_of_flag_index + 1],
             The_start_index= start_of_flag_index,
-            The_end_index= end_of_flag_index,
-            The_start_FTC= end_of_flag_index
-        )
+            The_end_index= end_of_flag_index)
 
         # The_local_tasks.append(asyncio.create_task(self.CDataBase.add_flag_Function(flag,self.DB_name_flags_table)))
         self.Detected_Flags.append(flag)

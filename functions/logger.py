@@ -98,10 +98,10 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
     color = color_map.get(f"{The_type_of_log}_{The_level}")
     style = style_map.get(The_level)
 
-    logger(The_message)
+    logger(The_message) # type: ignore
 
     if The_level == "title":
         timestamp = f"     ({datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')})"
-        print(color + style + The_message + Style.RESET_ALL + Fore.LIGHTBLACK_EX + Style.DIM + timestamp + Style.RESET_ALL)
+        print(color + style + The_message + Style.RESET_ALL + Fore.LIGHTBLACK_EX + Style.DIM + timestamp + Style.RESET_ALL) # type: ignore
     else:
-        print(color + style + The_message + Style.RESET_ALL)
+        print(color + style + The_message + Style.RESET_ALL) # type: ignore

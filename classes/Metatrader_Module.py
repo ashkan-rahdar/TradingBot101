@@ -128,7 +128,7 @@ class Metatrader_Module_Class:
             "MN1": self.mt.TIMEFRAME_MN1,
         }
 
-        self.order_type_mapping = {
+        self.order_type_mapping: dict[typing.Literal["Buy", "Sell", "Buy Limit", "Sell Limit"],int] = {
             "Buy": self.mt.ORDER_TYPE_SELL,
             "Sell": self.mt.ORDER_TYPE_SELL,
             "Buy Limit": self.mt.ORDER_TYPE_BUY_LIMIT,
@@ -180,10 +180,9 @@ class Metatrader_Module_Class:
                 symbol information cannot be retrieved).
         """
         
-        order_type = self.order_type_mapping.get(order_type, None)
-        
+        order_type_INT = self.order_type_mapping.get(order_type, None)
         # Get number of decimal places for the asset dynamically
-        symbol_info = self.mt.symbol_info(ticker)
+        symbol_info = self.mt.symbol_info(ticker) # type: ignore
         if symbol_info is None:
             print(f"Error: Could not retrieve symbol info for {ticker}")
             return None, None
@@ -191,7 +190,7 @@ class Metatrader_Module_Class:
         digits = symbol_info.digits  # Number of decimal places for the symbol
 
         request = {
-            "action": self.mt.TRADE_ACTION_DEAL if order_type < 2 else self.mt.TRADE_ACTION_PENDING,
+            "action": self.mt.TRADE_ACTION_DEAL if (order_type_INT is not None and order_type_INT < 2) else self.mt.TRADE_ACTION_PENDING,
             "symbol": ticker,
             "volume": vol,
             "type": order_type,
@@ -204,7 +203,7 @@ class Metatrader_Module_Class:
             "type_time": self.mt.ORDER_TIME_GTC,
             "type_filling": self.mt.ORDER_FILLING_FOK
         }
-        return self.mt.order_send(request)
+        return self.mt.order_send(request) # type: ignore
 
     def partial_close(self, ticket: int, ratio: float  = 1):
         """
@@ -235,7 +234,7 @@ class Metatrader_Module_Class:
             return False
 
         # Get open positions
-        positions = self.mt.positions_get()
+        positions = self.mt.positions_get() # type: ignore
 
         if positions is None:
             print("No open positions")
@@ -252,7 +251,7 @@ class Metatrader_Module_Class:
         volume_to_close = position.volume * ratio
 
         # Ensure the volume to close is valid (mt might have minimum volume limits)
-        if volume_to_close < self.mt.symbol_info(position.symbol).volume_min:
+        if volume_to_close < self.mt.symbol_info(position.symbol).volume_min: # type: ignore
             print(f"Volume to close ({volume_to_close}) is less than the minimum allowed.")
             return False
 
@@ -269,7 +268,7 @@ class Metatrader_Module_Class:
         }
 
         # Send the close order
-        result = self.mt.order_send(close_request)
+        result = self.mt.order_send(close_request) # type: ignore
 
         if result and result.retcode == self.mt.TRADE_RETCODE_DONE:
             print(f"Successfully closed {ratio*100:.1f}% of position {ticket}. Remaining volume: {position.volume - volume_to_close:.2f}")
@@ -305,7 +304,7 @@ class Metatrader_Module_Class:
             "comment": "Order Removed"
         }
         # Send order to mt
-        order_result = self.mt.order_send(request)
+        order_result = self.mt.order_send(request) # type: ignore
         return order_result
     
     async def initialize_mt5_Function(self):
@@ -326,7 +325,7 @@ class Metatrader_Module_Class:
             - The `print_and_logging_Function` is used to log an error message in case of failure.
         """
         
-        if not self.mt.initialize():
+        if not self.mt.initialize(): # type: ignore
             print_and_logging_Function("error", "MetaTrader5 initialization failed", "title")
             raise RuntimeError("MetaTrader5 initialization failed")
 
@@ -348,7 +347,7 @@ class Metatrader_Module_Class:
         """
         
         global config
-        if not self.mt.login(config["account_info"]["login"], config["account_info"]["password"], config["account_info"]["server"]):
+        if not self.mt.login(config["account_info"]["login"], config["account_info"]["password"], config["account_info"]["server"]): # type: ignore
             print_and_logging_Function("error", "MetaTrader5 login failed", "title")
             raise RuntimeError("MetaTrader5 login failed")
 
@@ -381,15 +380,15 @@ class Metatrader_Module_Class:
         
         selected_timeframe = self.timeframe_mapping.get(The_timeframe, None)
         try:
-            symbol_info = self.mt.symbol_info(config["trading_configs"]["asset"])
+            symbol_info = self.mt.symbol_info(config["trading_configs"]["asset"]) # type: ignore
             if symbol_info is None or not symbol_info.trade_mode:
                 print_and_logging_Function("error", "symbol is invalid or market is close now", "description")
 
             if len(The_Dataset) != 0:
                     print_and_logging_Function("info", f"Waiting for new {The_timeframe} candles...", "description")
 
-            while not parameters.The_emergency_flag:
-                DataSet = pd.DataFrame(self.mt.copy_rates_from_pos(config["trading_configs"]["asset"], 
+            while not parameters.shutdown_flag:
+                DataSet = pd.DataFrame(self.mt.copy_rates_from_pos(config["trading_configs"]["asset"],  # type: ignore
                                                             selected_timeframe, 
                                                             0, 
                                                             10000))

@@ -1,5 +1,6 @@
 import typing
 import pandas as pd
+from pandas import Series
 import numpy as np
 import json
 import sys
@@ -43,8 +44,7 @@ class Flag_Class:
                  The_low: FlagPoint_Class, 
                  The_data_in_flag: pd.DataFrame, 
                  The_start_index: int, 
-                 The_end_index: int, 
-                 The_start_FTC: int):
+                 The_end_index: int):
         """        
         __init__(self, The_flag_type, The_high, The_low, The_data_in_flag, The_start_index, The_end_index, The_start_FTC):
             Initializes the Flag_Class object with the given parameters.
@@ -74,7 +74,6 @@ class Flag_Class:
                                                 flag_type = self.flag_type,
                                                 start_of_index = The_high.index if The_flag_type == "Bullish" else The_low.index)
             self.FTC.type = "FTC"
-            self.FTC.first_valid_trade_time = The_start_FTC
             
             if The_flag_type == "Bullish":
                 EL_direction = "Bearish"
@@ -104,7 +103,7 @@ class Flag_Class:
                 if self.EL.length is not None:
                     self.MPL.length_cal_Function()
             else:
-                self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None))
+                self.MPL = DP_Parameteres_Class(FlagPoint_Class(None, None, None), FlagPoint_Class(None, None, None)) # type: ignore
             self.MPL.type = "MPL"
 
             self.FTC.trade_direction = self.EL.trade_direction = self.MPL.trade_direction = self.flag_type
@@ -147,9 +146,9 @@ class Flag_Class:
             Returns:
                 DP_Parameteres_Class: The detected data points for the flag pattern.
         """
-        time = dataset['time']
+        time : Series[pd.Timestamp] = dataset['time']
 
-        DP = DP_Parameteres_Class(FlagPoint_Class(None, None,None), FlagPoint_Class(None, None,None))
+        DP = DP_Parameteres_Class(FlagPoint_Class(None, None,None), FlagPoint_Class(None, None,None)) # type: ignore
         if flag_type == "Bullish":
             highs = dataset['high'].to_numpy()
             dataprime = dataset.iloc[:-1]

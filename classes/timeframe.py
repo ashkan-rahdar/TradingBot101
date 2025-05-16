@@ -7,7 +7,7 @@ import bisect
 import numpy as np
 import datetime
 import random
-
+import typing
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss
 from catboost import CatBoostClassifier, Pool
@@ -334,13 +334,12 @@ class Timeframe_Class:
     async def ML_Main_Function(self):
         RR_levels = np.arange(1.25, 5.1, 0.25)  # Range of test RRs
         probs = []
-        self.Do_Trade_DpList : list[tuple[DP_Parameteres_Class, str, int, int]] = []
-
-        X_FTC, Y_FTC, X_EL, Y_EL, X_MPL, Y_MPL = await self.CMySQL_DataBase.Read_ML_table_Function()
+        self.Do_Trade_DpList : list[tuple[DP_Parameteres_Class, typing.Union[str, None], int, int]] = []
+        X_FTC, Y_FTC = await self.CMySQL_DataBase.Read_ML_table_Function()
         FTC_models = self.RR_ML_Training(RR_levels, X_FTC, Y_FTC, "FTC")
         DP_TradeList = await self.CMySQL_DataBase._get_tradeable_DPs_Function(self.Tradeable_DPs)
         
-        if FTC_models.get(1.25) == -1:
+        if any(map(lambda k: k != k, FTC_models.keys())):
             return
         
         for i in range(len(DP_TradeList)):
@@ -465,12 +464,13 @@ class Timeframe_Class:
             winrate = succeeded_trades / totaltrades
             print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test} percent profit with the {winrate} winrate in {totaltrades} trades", "title")
             if winrate <= 0.6 and result_on_test <= 0 :
-                models = {1.25: -1}
+                models = {float("nan"): CatBoostClassifier()} 
                 self.RANDOM_STATE = random.randint(10, 50)
                 print_and_logging_Function("warning", "Based on current data Bot is not profitable", "title")
             return models
         except RuntimeError as The_error:
             print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{The_error}", "title")
+            return {float("nan"): CatBoostClassifier()} 
     
     async def Update_Positions_Function(self):
         """
@@ -517,14 +517,14 @@ class Timeframe_Class:
         
         def calculate_trade_volume(entry_price: float, stop_loss_price: float, risk_percent: float) -> float:
             symbol = config["trading_configs"]["asset"]
-            account_info = CMetatrader_Module.mt.account_info()
+            account_info = CMetatrader_Module.mt.account_info() # type: ignore
             if account_info is None:
                 raise Exception("Failed to fetch account info.")
 
             balance = account_info.balance
             risk_amount = (risk_percent / 100) * balance
 
-            symbol_info = CMetatrader_Module.mt.symbol_info(symbol)
+            symbol_info = CMetatrader_Module.mt.symbol_info(symbol) # type: ignore
             if symbol_info is None:
                 raise Exception(f"Symbol {symbol} not found.")
 
@@ -576,25 +576,25 @@ class Timeframe_Class:
                         sl=             aDP.High.price,
                         tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
                     )
-                if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE:
+                if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                 else:
                     if not config["runtime"]["Able_to_Open_positions"]:
-                        CMetatrader_Module.cancel_order(result.order)
+                        CMetatrader_Module.cancel_order(result.order) # type: ignore
                     # Get the correct order type from the mapping
-                    order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type)
+                    order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type) # type: ignore
 
                     inserting_positions_DB.append((
                         The_index,                # traded_dp_id
                         order_type,               # order_type
-                        result.request.price,     # price
-                        result.request.sl,        # sl
-                        result.request.tp,        # tp
+                        result.request.price,     # price # type: ignore
+                        result.request.sl,        # sl # type: ignore
+                        result.request.tp,        # tp # type: ignore
                         datetime.datetime.now(),  # Last_modified_time
-                        result.request.volume,    # vol
-                        result.order,             # order_id
+                        result.request.volume,    # vol # type: ignore
+                        result.order,             # order_id # type: ignore
                         0                         # The result of trade
-                    ))
+                    )) # type: ignore
 
                     new_opened_positions += 1
                     print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")

@@ -7,7 +7,7 @@
         "spread": 0
     },
     "trading_configs":{
-        "timeframes": ["M15"],
+        "timeframes": ["M2"],
         "asset": "BTCUSD",
 
         "risk_management":{
@@ -22,7 +22,6 @@
             "status": true,
             "password": "ashkan"
         }, 
-        "Another_function_syntax": "ashkan1",
-        "Able_to_Open_positions": true
+        "Able_to_Open_positions": false
     }
 }

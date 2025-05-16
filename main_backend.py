@@ -9,6 +9,7 @@ import os  # noqa: E402
 import json  # noqa: E402
 import time  # noqa: E402
 import cProfile  # noqa: E402
+# import subprocess  # noqa: E402
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -22,9 +23,7 @@ import parameters  # noqa: E402
 with open("./config.json", "r") as file:
     config = json.load(file)
 
-The_emergency_event = asyncio.Event()
-
-async def emergency_listener_Function():
+async def shutdown_Function():
     """
     Asynchronous function that listens for user input to trigger an emergency mode.
     This function continuously monitors user input from the standard input (stdin) 
@@ -57,24 +56,46 @@ async def emergency_listener_Function():
         message instructing the user on the correct syntax or how to stop the 
         program.
     """
+    def handle_shutdown():
+        print_and_logging_Function("info", "Shutting down gracefully...")
+        parameters.shutdown_flag = True
+        
+    def handle_restart():
+        print_and_logging_Function("info", "Restarting bot gracefully...")
+        # parameters.restart_flag = True
+        # parameters.shutdown_flag = True
+        
+    def handle_change_seed():
+        print("Changing ML seed...")
+        # Randomize or ask for new seed input
+
+    def handle_close_positions():
+        print("Closing all positions...")
+        # Call your broker API to close all open trades
+        
+    COMMANDS = {
+        "restart": handle_restart,
+        "shutdown": handle_shutdown,
+        "change the ML seed": handle_change_seed,
+        "close all positions": handle_close_positions
+    }
     
-    global config
-    emergency_keyword = config["runtime"]["Another_function_syntax"]
     while True:
         user_input = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
-        if user_input.strip() == emergency_keyword:
-            # if config["runtime"]["Another_function_syntax"]["status"]:
-            if True:
-                print(Fore.RED + "Emergency trigger activated" + Style.RESET_ALL)
-                parameters.The_emergency_flag = True
-                The_emergency_event.set()
-                print_and_logging_Function("warning", "Emergency trigger activated by user input.", "title")
-                break
-            else:
-                print_and_logging_Function("warning", "emergency_mode in config is false", "title")
+        user_input = user_input.lower().strip()
 
-        elif user_input.strip() != emergency_keyword:
-            print_and_logging_Function("warning", f"Not valid syntax. If you want trigger emergency mode type:{emergency_keyword} and if want to stop code use Ctrl+C", "title")
+        command_fn = COMMANDS.get(user_input)
+        if command_fn:
+            command_fn()
+
+            # if parameters.restart_flag:
+            #     print("Relaunching bot...")
+            #     subprocess.Popen([sys.executable] + sys.argv)  # Starts a new instance
+            #     print("Shutting down current instance...")
+            #     sys.exit(1) 
+            break  # Exit the current bot instance
+        else:
+            print_and_logging_Function("warning", f"Not valid syntax. Your Input: {user_input}. \n Valid Inputs: {list(COMMANDS.keys())}", "title")
 
 def emergency_handler_Function(sig, frame):
     """
@@ -136,18 +157,17 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
         profiler.enable()
         
         # Step 1: Fetch Data
-        if parameters.The_emergency_flag:
+        if parameters.shutdown_flag:
             return
         
         try:
             The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
         except RuntimeError as The_error:
             print_and_logging_Function("critical", f"Critical failure in fetching {The_timeframe} data: {The_error}", "title")
-            parameters.The_emergency_flag = True
-            The_emergency_event.set()
+            parameters.shutdown_flag = True
             The_Collected_DataSet = pd.DataFrame()
         
-        if parameters.The_emergency_flag:
+        if parameters.shutdown_flag:
             return
         
         CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
@@ -157,26 +177,32 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
             await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
         except RuntimeError as The_error:
             print_and_logging_Function("critical", f"Critical failure in flag detection {The_timeframe}: {The_error}", "title")
+            
+        if parameters.shutdown_flag:
+            return
 
         # step 3: Validate DPs and Flags
         try:
             await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
         except RuntimeError as The_error:
             print_and_logging_Function("critical", f"Critical failure in validating DPs {The_timeframe}: {The_error}", "title")
-
+        
+        if parameters.shutdown_flag:
+            return
         # step 4: Train ML
         try:
             await run_with_retries_Function(CTimeFrames[The_index].ML_Main_Function)
         except RuntimeError as The_error:
             print_and_logging_Function("critical", f"Critical failure in ML {The_timeframe}: {The_error}", "title")
-            
+        
+        if parameters.shutdown_flag:
+            return    
+        
         # step 5: Update and open Positions
         try:
             await run_with_retries_Function(CTimeFrames[The_index].Update_Positions_Function)
         except RuntimeError as The_error:
             print_and_logging_Function("critical", f"Critical failure in updating Positions {The_timeframe}: {The_error}", "title")
-
-
 
         profiler.disable()
         elapsed = time.time() - start_time
@@ -208,7 +234,7 @@ async def main():
         - Triggering emergency actions when necessary.
     """
     
-    while not parameters.The_emergency_flag:
+    while not parameters.shutdown_flag:
         try:
             tasks = []
             for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
@@ -216,25 +242,25 @@ async def main():
 
                 task = asyncio.create_task(Each_TimeFrame_Function(The_index, The_timeframe))
                 tasks.append(task)
-                if parameters.The_emergency_flag:
+                if parameters.shutdown_flag:
                     break
             await asyncio.gather(*tasks)
 
         except Exception as The_error:
             print_and_logging_Function("critical", f"Unhandled error in main loop: {The_error}", "title")
-            parameters.The_emergency_flag = True
-            The_emergency_event.set()
+            parameters.shutdown_flag = True
 
-    if parameters.The_emergency_flag:
+    if parameters.shutdown_flag:
         # Perform emergency actions here
         print_and_logging_Function("critical", "an example of emergency actions is this print", "title")
 
 if __name__ == "__main__":
+    parameters.shutdown_flag = False
     signal.signal(signal.SIGINT, emergency_handler_Function)
     signal.signal(signal.SIGTERM, emergency_handler_Function)
     try:
         The_loop = asyncio.get_event_loop()
-        The_loop.create_task(emergency_listener_Function())
+        The_loop.create_task(shutdown_Function())
         The_loop.run_until_complete(main())
     except Exception as The_error:
         print_and_logging_Function("critical", f"Critical error in the application lifecycle: {The_error}", "title")

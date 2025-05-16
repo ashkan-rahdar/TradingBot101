@@ -81,7 +81,7 @@ class DP_Parameteres_Class:
         self.trade_direction = trade_direction
 
         self.length = None    
-        self.ratio_to_flag = 1
+        self.ratio_to_flag : float= 1
         self.number_used_candle = 0
         self.used_ratio = 0
         

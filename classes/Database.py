@@ -184,7 +184,7 @@ class Database_Class:
             - The function commits changes to the database after each batch insert operation.
         """
         await self.initialize_db_pool_Function()
-        async with self.db_pool.acquire() as conn:
+        async with self.db_pool.acquire() as conn: # type: ignore
             async with conn.cursor() as cursor:
                 try:
                     await conn.begin()  # Start transaction
@@ -336,13 +336,13 @@ class Database_Class:
             values = [(weight, dp_id) for dp_id, weight in dps_to_update]
 
             # Execute the batch update
-            async with self.db_pool.acquire() as conn:
+            async with self.db_pool.acquire() as conn: # type: ignore
                 async with conn.cursor() as cursor:
                     await cursor.executemany(query, values)  # Perform the batch update
                     await conn.commit()  # Commit the transaction
         except Exception as e:
             print_and_logging_Function("error", f"Error in batch updating DP weights: {e}", "title")
-            await conn.rollback()  # Rollback if there's an error
+            await conn.rollback()  # type: ignore # Rollback if there's an error
 
     async def _update_dp_Results_Function(self, dps_to_update: list):
         """
@@ -369,13 +369,13 @@ class Database_Class:
             values = [(Result, dp_id) for dp_id, Result in dps_to_update]
 
             # Execute the batch update
-            async with self.db_pool.acquire() as conn:
+            async with self.db_pool.acquire() as conn: # type: ignore
                 async with conn.cursor() as cursor:
                     await cursor.executemany(query, values)  # Perform the batch update
                     await conn.commit()  # Commit the transaction
         except Exception as e:
             print_and_logging_Function("error", f"Error in batch updating DP Results: {e}", "title")
-            await conn.rollback()  # Rollback if there's an error
+            await conn.rollback()  # type: ignore # Rollback if there's an error
             
     async def _get_update_DPlist_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
         """
@@ -411,7 +411,7 @@ class Database_Class:
         """
         
         try:
-            async with self.db_pool.acquire() as conn:
+            async with self.db_pool.acquire() as conn: # type: ignore
                 async with conn.cursor() as cursor:
                     # Step 1: Get important DPs
                     await cursor.execute(f"""
@@ -475,8 +475,8 @@ class Database_Class:
                         low_point = flag_points.get(str(row['Low_Point'])) if row['Low_Point'] else None
                         dp = DP_Parameteres_Class(
                             type=row['type'], 
-                            High=high_point, 
-                            Low=low_point, 
+                            High=high_point,  # type: ignore
+                            Low=low_point,  # type: ignore
                             weight=row['weight'], 
                             first_valid_trade_time=row['first_valid_trade_time'], 
                             trade_direction=row['trade_direction']
@@ -508,7 +508,7 @@ class Database_Class:
             return []
 
         try:
-            async with self.db_pool.acquire() as conn:
+            async with self.db_pool.acquire() as conn: # type: ignore
                 async with conn.cursor() as cursor:
                     # 1) Fetch the requested DP rows
                     sql = f"""
@@ -568,8 +568,8 @@ class Database_Class:
                     for rec in updated:
                         dp = DP_Parameteres_Class(
                             type=rec['type'],
-                            High=flag_points.get(rec['High_Point']),
-                            Low =flag_points.get(rec['Low_Point']),
+                            High=flag_points.get(rec['High_Point']), # type: ignore
+                            Low =flag_points.get(rec['Low_Point']), # type: ignore
                             weight=rec['weight'],
                             first_valid_trade_time=rec['first_valid_trade_time'],
                             trade_direction=rec['trade_direction']
@@ -637,7 +637,7 @@ class Database_Class:
 
         # Perform the batch insert
         try:
-            async with self.db_pool.acquire() as conn:
+            async with self.db_pool.acquire() as conn: # type: ignore
                 async with conn.cursor() as cursor:
                     # Execute the batch insert using executemany
                     await cursor.executemany(query, positions)
@@ -650,7 +650,7 @@ class Database_Class:
         
     async def Read_ML_table_Function(self) -> tuple[pd.DataFrame, pd.DataFrame]:
         try:
-            async with self.db_pool.acquire() as conn:
+            async with self.db_pool.acquire() as conn: # type: ignore
                 async with conn.cursor() as cursor:
                     # Fetch all rows
                     await cursor.execute(f"""
@@ -679,19 +679,20 @@ class Database_Class:
 
                     # Prepare Input and Output
                     FTC_full_df = full_df[full_df['type'] == 'FTC'].reset_index(drop=True)
-                    EL_full_df = full_df[full_df['type'] == 'EL'].reset_index(drop=True)
-                    MPL_full_df = full_df[full_df['type'] == 'MPL'].reset_index(drop=True)
+                    # EL_full_df = full_df[full_df['type'] == 'EL'].reset_index(drop=True)
+                    # MPL_full_df = full_df[full_df['type'] == 'MPL'].reset_index(drop=True)
 
                     FTC_Input = FTC_full_df.drop(columns=['Result', 'id', 'type'])
                     FTC_Output = FTC_full_df['Result']
                     
-                    EL_Input = EL_full_df.drop(columns=['Result', 'id', 'type'])
-                    EL_Output = EL_full_df['Result']
+                    # EL_Input = EL_full_df.drop(columns=['Result', 'id', 'type'])
+                    # EL_Output = EL_full_df['Result']
                     
-                    MPL_Input = MPL_full_df.drop(columns=['Result', 'id', 'type'])
-                    MPL_Output = MPL_full_df['Result']
+                    # MPL_Input = MPL_full_df.drop(columns=['Result', 'id', 'type'])
+                    # MPL_Output = MPL_full_df['Result']
                     
-                    return FTC_Input, FTC_Output, EL_Input, EL_Output, MPL_Input, MPL_Output
+                    # return FTC_Input, FTC_Output, EL_Input, EL_Output, MPL_Input, MPL_Output
+                    return FTC_Input, FTC_Output # type: ignore
         except Exception as e:
             print_and_logging_Function("error", f"Error in fetching ML Dataset: {e}", "title")
             return pd.DataFrame(), pd.DataFrame()
