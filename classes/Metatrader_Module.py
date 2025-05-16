@@ -142,7 +142,8 @@ class Metatrader_Module_Class:
                             price: float, 
                             sl: float, 
                             tp: float, 
-                            ticker: str = config["trading_configs"]["asset"]):
+                            ticker: str = config["trading_configs"]["asset"],
+                            comment: str = "My Code opened"):
         """
         Opens a trading position in MetaTrader with specified parameters.
         This function sends a trade request to the MetaTrader platform to open a position 
@@ -199,7 +200,7 @@ class Metatrader_Module_Class:
             "tp": round(tp, digits),
             "deviation": 20,
             "magic": 101,
-            "comment": "My Code opened",
+            "comment": comment,
             "type_time": self.mt.ORDER_TIME_GTC,
             "type_filling": self.mt.ORDER_FILLING_FOK
         }

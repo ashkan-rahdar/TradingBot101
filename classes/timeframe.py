@@ -567,6 +567,7 @@ class Timeframe_Class:
                         price=          aDP.High.price,
                         sl=             aDP.Low.price,
                         tp=             aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price),
+                        comment=        f"{Estimated_Risk}% risk for DP No.{The_index}"
                     )
                 else:
                     result = CMetatrader_Module.Open_position_Function(
@@ -575,6 +576,7 @@ class Timeframe_Class:
                         price=          aDP.Low.price,
                         sl=             aDP.High.price,
                         tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
+                        comment=        f"{Estimated_Risk}% risk for DP No.{The_index}"
                     )
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
                     print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
