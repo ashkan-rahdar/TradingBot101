@@ -67,9 +67,9 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
     caller_filename = os.path.basename(caller_frame.filename)
     caller_name = os.path.splitext(caller_filename)[0].replace("_", " ")
 
-    The_message = caller_name + ": _______ " + The_message + " _______"
+    base_message = f"{caller_name}: _______ {The_message} _______"
     if The_level == "description":
-        The_message = "         -------> " + The_message
+        base_message = "         -------> " + base_message
 
     logger_map = {
         "error": The_logger.error,
@@ -90,7 +90,7 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
     }
 
     style_map = {
-        "title" : Style.BRIGHT,
+        "title": Style.BRIGHT,
         "description": Style.DIM
     }
 
@@ -98,10 +98,27 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
     color = color_map.get(f"{The_type_of_log}_{The_level}")
     style = style_map.get(The_level)
 
-    logger(The_message) # type: ignore
+    # === Logging behavior ===
+    if The_type_of_log in {"error", "critical"}:
+        # Check if we're in an exception context
+        exc_info = traceback.format_exc()
+        if "NoneType" not in exc_info:
+            full_message = f"{base_message}\n[Traceback]\n{exc_info}"
+            logger(full_message) # type: ignore
+        else:
+            logger(base_message) # type: ignore
+    else:
+        logger(base_message) # type: ignore
 
+    # === Print to terminal ===
     if The_level == "title":
         timestamp = f"     ({datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')})"
-        print(color + style + The_message + Style.RESET_ALL + Fore.LIGHTBLACK_EX + Style.DIM + timestamp + Style.RESET_ALL) # type: ignore
+        print(color + style + base_message + Style.RESET_ALL + Fore.LIGHTBLACK_EX + Style.DIM + timestamp + Style.RESET_ALL) # type: ignore
     else:
+        print(color + style + base_message + Style.RESET_ALL) # type: ignore
+
+    # Optionally, print traceback to terminal as well
+    if The_type_of_log in {"error", "critical"} and "NoneType" not in exc_info: # type: ignore
+        print(Fore.LIGHTBLACK_EX + Style.DIM + exc_info + Style.RESET_ALL) # type: ignore
+
         print(color + style + The_message + Style.RESET_ALL) # type: ignore
