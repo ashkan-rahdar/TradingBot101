@@ -25,6 +25,7 @@ from functions.logger import print_and_logging_Function
 from functions.run_with_retries import run_with_retries_Function
 from functions.Reaction_detector import main_reaction_detector
 from classes.Database import Database_Class
+from classes.Telegrambot import CTelegramBot
 
 TARGET_PROB = config["trading_configs"]["risk_management"]["MIN_Prob"]
 MAX_RISK = config["trading_configs"]["risk_management"]["MAX_Risk"]
@@ -560,47 +561,57 @@ class Timeframe_Class:
 
         for aDP, The_index, Estimated_Risk, Estimated_RR in self.Do_Trade_DpList:
             if The_index not in self.CMySQL_DataBase.Traded_DP_Set:
-                if aDP.trade_direction == "Bullish":    
-                    result = CMetatrader_Module.Open_position_Function(
-                        order_type=     "Buy Limit",
-                        vol=            calculate_trade_volume(aDP.High.price, aDP.Low.price, Estimated_Risk),
-                        price=          aDP.High.price,
-                        sl=             aDP.Low.price,
-                        tp=             aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price),
-                        comment=        f"{Estimated_Risk}% risk for DP No.{The_index}"
-                    )
-                else:
-                    result = CMetatrader_Module.Open_position_Function(
-                        order_type=     "Sell Limit",
-                        vol=            calculate_trade_volume(aDP.Low.price, aDP.High.price, Estimated_Risk),
-                        price=          aDP.Low.price,
-                        sl=             aDP.High.price,
-                        tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
-                        comment=        f"{Estimated_Risk}% risk for DP No.{The_index}"
-                    )
-                if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
-                    print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
-                else:
-                    if not config["runtime"]["Able_to_Open_positions"]:
-                        CMetatrader_Module.cancel_order(result.order) # type: ignore
-                    # Get the correct order type from the mapping
-                    order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type) # type: ignore
+                try:
+                    probability = ((Estimated_Risk - MIN_RISK) / (MAX_RISK - MIN_RISK)) * (1.0 - TARGET_PROB) + TARGET_PROB
+                    if aDP.trade_direction == "Bullish":    
+                        result = CMetatrader_Module.Open_position_Function(
+                            order_type=     "Buy Limit",
+                            vol=            calculate_trade_volume(aDP.High.price, aDP.Low.price, Estimated_Risk),
+                            price=          aDP.High.price,
+                            sl=             aDP.Low.price,
+                            tp=             aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price),
+                            comment =       f"{int(probability * 100)}% chance",
+                            
+                        )
+                    else:
+                        result = CMetatrader_Module.Open_position_Function(
+                            order_type=     "Sell Limit",
+                            vol=            calculate_trade_volume(aDP.Low.price, aDP.High.price, Estimated_Risk),
+                            price=          aDP.Low.price,
+                            sl=             aDP.High.price,
+                            tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
+                            comment =       f"{int(probability * 100)}% chance",
+                        )
+                    if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
+                        print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
+                    else:
+                        if not config["runtime"]["Able_to_Open_positions"]:
+                            CMetatrader_Module.cancel_order(result.order) # type: ignore
+                        # Get the correct order type from the mapping
+                        order_type = CMetatrader_Module.reverse_order_type_mapping.get(result.request.type) # type: ignore
 
-                    inserting_positions_DB.append((
-                        The_index,                # traded_dp_id
-                        order_type,               # order_type
-                        result.request.price,     # price # type: ignore
-                        result.request.sl,        # sl # type: ignore
-                        result.request.tp,        # tp # type: ignore
-                        datetime.datetime.now(),  # Last_modified_time
-                        result.request.volume,    # vol # type: ignore
-                        result.order,             # order_id # type: ignore
-                        0                         # The result of trade
-                    )) # type: ignore
+                        inserting_positions_DB.append((
+                            The_index,                # traded_dp_id
+                            order_type,               # order_type
+                            result.request.price,     # price # type: ignore
+                            result.request.sl,        # sl # type: ignore
+                            result.request.tp,        # tp # type: ignore
+                            datetime.datetime.now(),  # Last_modified_time
+                            result.request.volume,    # vol # type: ignore
+                            result.order,             # order_id # type: ignore
+                            0                         # The result of trade
+                        )) # type: ignore
 
-                    new_opened_positions += 1
-                    print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
-                    self.CMySQL_DataBase.Traded_DP_Set.add(The_index)
+                        new_opened_positions += 1
+                        print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
+                        self.CMySQL_DataBase.Traded_DP_Set.add(The_index)
+                        try:
+                            CTelegramBot.notify_placed_position(order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100)) # type: ignore
+                        except Exception as e:
+                            print_and_logging_Function("error", f"{e}", "title")
+
+                except RuntimeError as e:
+                    print_and_logging_Function("error", f"Error in opening the position of DP No. {The_index}: {e}")
                      
         try:
             await self.CMySQL_DataBase._insert_positions_batch(inserting_positions_DB)

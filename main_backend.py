@@ -9,6 +9,7 @@ import os  # noqa: E402
 import json  # noqa: E402
 import time  # noqa: E402
 import cProfile  # noqa: E402
+import threading  # noqa: E402
 # import subprocess  # noqa: E402
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,6 +18,7 @@ from functions.logger import print_and_logging_Function  # noqa: E402
 from functions.run_with_retries import run_with_retries_Function  # noqa: E402
 from classes.timeframe import CTimeFrames  # noqa: E402
 from classes.Metatrader_Module import CMetatrader_Module  # noqa: E402
+from classes.Telegrambot import TelegramBot_loop_Funciton  # noqa: E402
 import parameters  # noqa: E402
 
 # Load JSON config file
@@ -244,7 +246,7 @@ async def main():
                 tasks.append(task)
                 if parameters.shutdown_flag:
                     break
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         except Exception as The_error:
             print_and_logging_Function("critical", f"Unhandled error in main loop: {The_error}", "title")
@@ -253,11 +255,17 @@ async def main():
     if parameters.shutdown_flag:
         # Perform emergency actions here
         print_and_logging_Function("critical", "an example of emergency actions is this print", "title")
+        sys.exit(1)
 
 if __name__ == "__main__":
     parameters.shutdown_flag = False
     signal.signal(signal.SIGINT, emergency_handler_Function)
     signal.signal(signal.SIGTERM, emergency_handler_Function)
+
+    # Start Telegram bot in background thread
+    telegram_thread = threading.Thread(target=TelegramBot_loop_Funciton, daemon=True)
+    telegram_thread.start()
+
     try:
         The_loop = asyncio.get_event_loop()
         The_loop.create_task(shutdown_Function())

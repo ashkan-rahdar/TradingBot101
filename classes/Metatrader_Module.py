@@ -180,31 +180,44 @@ class Metatrader_Module_Class:
                 - The second element is `None` if the trade request fails (e.g., if 
                 symbol information cannot be retrieved).
         """
-        
-        order_type_INT = self.order_type_mapping.get(order_type, None)
-        # Get number of decimal places for the asset dynamically
-        symbol_info = self.mt.symbol_info(ticker) # type: ignore
-        if symbol_info is None:
-            print(f"Error: Could not retrieve symbol info for {ticker}")
-            return None, None
-        
-        digits = symbol_info.digits  # Number of decimal places for the symbol
+        try:        
+            order_type_INT = self.order_type_mapping.get(order_type, None)
+            # Get number of decimal places for the asset dynamically
+            symbol_info = self.mt.symbol_info(ticker) # type: ignore
+            if symbol_info is None:
+                print(f"Error: Could not retrieve symbol info for {ticker}")
+                return None, None
+            
+            digits = symbol_info.digits
+            
+            tick_value = symbol_info.trade_tick_value
+            commission_per_lot = config["account_info"]["commision"]
+            total_commission = commission_per_lot * vol
 
-        request = {
-            "action": self.mt.TRADE_ACTION_DEAL if (order_type_INT is not None and order_type_INT < 2) else self.mt.TRADE_ACTION_PENDING,
-            "symbol": ticker,
-            "volume": vol,
-            "type": order_type,
-            "price": round(price, digits),  # Dynamically rounding based on symbol
-            "sl": round(sl, digits),
-            "tp": round(tp, digits),
-            "deviation": 20,
-            "magic": 101,
-            "comment": comment,
-            "type_time": self.mt.ORDER_TIME_GTC,
-            "type_filling": self.mt.ORDER_FILLING_FOK
-        }
-        return self.mt.order_send(request) # type: ignore
+            # Adjust SL for commission
+            sl_adjusted = sl
+            if order_type == "Buy" or order_type == "Buy Limit":
+                sl_adjusted = sl - (total_commission / tick_value)
+            elif order_type == "Sell" or order_type == "Sell Limit":
+                sl_adjusted = sl + (total_commission / tick_value)# Number of decimal places for the symbol
+
+            request = {
+                "action": self.mt.TRADE_ACTION_DEAL if (order_type_INT is not None and order_type_INT < 2) else self.mt.TRADE_ACTION_PENDING,
+                "symbol": ticker,
+                "volume": vol,
+                "type": order_type_INT,
+                "price": round(price, digits),  # Dynamically rounding based on symbol
+                "sl": round(sl_adjusted, digits),
+                "tp": round(tp, digits),
+                "deviation": 20,
+                "magic": 101,
+                "comment": comment,
+                "type_time": self.mt.ORDER_TIME_GTC,
+                "type_filling": self.mt.ORDER_FILLING_FOK
+            }
+            return self.mt.order_send(request) # type: ignore
+        except Exception as e:
+            raise Exception(f"an Error occured in Opening position with {comment}: {e}")
 
     def partial_close(self, ticket: int, ratio: float  = 1):
         """
