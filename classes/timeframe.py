@@ -206,7 +206,7 @@ class Timeframe_Class:
             try:
                 await self.CMySQL_DataBase._update_dp_Results_Function(self.inserting_BackTest_DB)
                 if len(self.inserting_BackTest_DB) > 0 :
-                    print_and_logging_Function("info", f"{len(self.inserting_BackTest_DB)} backtest positions inserted in DB", "title")
+                    print_and_logging_Function("info", f"{len(self.inserting_BackTest_DB)} backtest positions inserted in DB", "description")
             except Exception as e:
                 print_and_logging_Function("error", f"Error in inserting BackTest position in DB: {e}", "title")
                 
@@ -557,7 +557,7 @@ class Timeframe_Class:
             return volume
         
         new_opened_positions = 0
-        inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]] = []
+        inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, int, float]] = []
 
         for aDP, The_index, Estimated_Risk, Estimated_RR in self.Do_Trade_DpList:
             if The_index not in self.CMySQL_DataBase.Traded_DP_Set:
@@ -599,6 +599,7 @@ class Timeframe_Class:
                             datetime.datetime.now(),  # Last_modified_time
                             result.request.volume,    # vol # type: ignore
                             result.order,             # order_id # type: ignore
+                            int(probability * 100),   # Estimated win chance
                             0                         # The result of trade
                         )) # type: ignore
 

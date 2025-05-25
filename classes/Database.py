@@ -81,7 +81,8 @@ class Database_Class:
         except Exception as e:
             print_and_logging_Function("error", f"Database initialization failed: {e}", "title")
 
-    def _initialize_tables_Function(self):     
+    def _initialize_tables_Function(self):
+        # in here I haven't used "FOREIGN KEY" due to I would insert tables using batch and table by table
         queries = [
             f"""
             CREATE TABLE IF NOT EXISTS {self.flag_points_table_name} (
@@ -94,8 +95,8 @@ class Database_Class:
             CREATE TABLE IF NOT EXISTS {self.important_dps_table_name} (
                 id VARCHAR(255) PRIMARY KEY,
                 type ENUM('FTC', 'EL', 'MPL') NULL,
-                High_Point VARCHAR(255) NULL,
-                Low_Point VARCHAR(255) NULL,
+                High_Point VARCHAR(255),
+                Low_Point VARCHAR(255),
                 weight FLOAT NULL,
                 first_valid_trade_time DATETIME NOT NULL,
                 trade_direction ENUM('Bullish', 'Bearish', 'Undefined') NULL,
@@ -135,19 +136,58 @@ class Database_Class:
                 SL FLOAT NOT NULL,
                 TP FLOAT NOT NULL,
                 Last_modified_time DATETIME NOT NULL,
-                Vol FLOAT Not Null,
-                Order_ID INT Not Null,
-                Result FLOAT NOT Null DEFAULT 0
+                Vol FLOAT NOT NULL,
+                Order_ID INT NOT NULL,
+                Probability INT NOT NULL,
+                Result FLOAT NOT NULL DEFAULT 0
             )
             """
         ]
+
+        # Triggers must be separate because they use BEGIN..END
+        trigger_queries = [
+            f"""
+            CREATE TRIGGER trg_update_position_result
+            AFTER UPDATE ON {self.important_dps_table_name}
+            FOR EACH ROW
+            BEGIN
+                IF NEW.Result <> OLD.Result THEN
+                    UPDATE {self.Positions_table_name}
+                    SET Result = NEW.Result
+                    WHERE Traded_DP = NEW.id AND Result <> NEW.Result;
+                END IF;
+            END
+            """,
+            f"""
+            CREATE TRIGGER trg_update_dp_result
+            AFTER UPDATE ON {self.Positions_table_name}
+            FOR EACH ROW
+            BEGIN
+                IF NEW.Result <> OLD.Result THEN
+                    UPDATE {self.important_dps_table_name}
+                    SET Result = NEW.Result
+                    WHERE id = NEW.Traded_DP AND Result <> NEW.Result;
+                END IF;
+            END
+            """
+        ]
+
         try:
             with self.connection_pool.get_connection() as conn:
                 cursor = conn.cursor()
                 for query in queries:
                     cursor.execute(query)
+
+                # MySQL requires each trigger to be created individually
+                for trigger in trigger_queries:
+                    try:
+                        cursor.execute(f"DROP TRIGGER IF EXISTS {trigger.split()[2]}")
+                        cursor.execute(trigger)
+                    except Exception as e:
+                        print_and_logging_Function("warning", f"Trigger creation failed: {e}", "title")
+
                 conn.commit()
-            print_and_logging_Function("info", f"{self.TimeFrame} Tables created successfully!", "title")
+                print_and_logging_Function("info", f"{self.TimeFrame} Tables and triggers created successfully!", "title")
         except Exception as e:
             print_and_logging_Function("error", f"Couldn't initialize DB: {e}", "title")
 
@@ -438,6 +478,7 @@ class Database_Class:
                     # Step 3: Fetch existing traded DPs
                     await cursor.execute(f"SELECT DISTINCT Traded_DP FROM {self.Positions_table_name}")
                     existing_dp_ids = {row[0] for row in await cursor.fetchall()}
+                    self.Traded_DP_Set.update(existing_dp_ids)
 
                     # Step 4: Fetch id -> Result mapping
                     await cursor.execute(f"""
@@ -468,8 +509,8 @@ class Database_Class:
                     dps = []
                     for row in updated_dp_results:
                         dp_id = row['id']
-                        if dp_id in existing_dp_ids:
-                            continue  # Already exists
+                        # if dp_id in self.Traded_DP_Set:  // in this way we let the code update everything of a traded DP and just not trading it again!
+                        #     continue  # Already exists
 
                         high_point = flag_points.get(str(row['High_Point'])) if row['High_Point'] else None
                         low_point = flag_points.get(str(row['Low_Point'])) if row['Low_Point'] else None
@@ -599,7 +640,7 @@ class Database_Class:
             )
             return []
 
-    async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int, float]]):
+    async def _insert_positions_batch(self, positions: list[tuple[str, str, float, float, float, datetime.datetime, int, int, int, float]]):
         """
         Asynchronously inserts a batch of trading position records into the database.
         This method performs a batch insert of trading positions into the specified database table.
@@ -630,7 +671,7 @@ class Database_Class:
         # Prepare the SQL query
         query = f"""
             INSERT INTO {self.Positions_table_name} 
-            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID, Result)
+            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID, Probability, Result)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE Traded_DP = Traded_DP
         """
