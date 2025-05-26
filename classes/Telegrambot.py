@@ -2,22 +2,18 @@ import requests
 from datetime import datetime
 import sys
 import os
-import time
 import typing
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import parameters
-from functions.logger import print_and_logging_Function
 
 class Telegrambot_Class():
     PASSWORD = '09120058456'
     authenticated_users = set()
     last_message_responded = None
     
-    def __init__(self) -> None:
-        print_and_logging_Function("info", 'Secure Telegram Bot is running...', "title")
-        
+    def __init__(self) -> None:        
         TELEGRAM_BOT_TOKEN = '8061847946:AAHdA8TJr7MpMUtnrbMLKs3NoLpJTxysxLY'
         self.API_URL = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}'
         
@@ -31,7 +27,7 @@ class Telegrambot_Class():
                 self.last_message_responded = update['update_id'] + 1
                 self.handle_message(update)
                 
-    def send_message(self, chat_id, text):
+    def send_message(self, chat_id: str = '645769674', text: str= ''):
         payload = {'chat_id': chat_id, 'text': text}
         requests.post(f'{self.API_URL}/sendMessage', json=payload)
         
@@ -84,7 +80,6 @@ class Telegrambot_Class():
 
         # Step 2: Handle authenticated commands
         command = text.lower()
-        print_and_logging_Function("info", f"Telegram command: {command}")
         if command == 'time':
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             self.send_message(chat_id, f'🕒 Current time is: {now}')
@@ -105,11 +100,3 @@ class Telegrambot_Class():
         return text
             
 CTelegramBot = Telegrambot_Class()
-
-def TelegramBot_loop_Funciton():
-    while not parameters.shutdown_flag:
-        try:
-            CTelegramBot.get_updates()
-        except Exception as e:
-            print_and_logging_Function('error', f'Error in Telegram Bot: {e}')
-        time.sleep(10)  # Avoid polling too fast
