@@ -1,11 +1,15 @@
 import logging
 import os
+import sys
 import traceback
 from logging import FileHandler
 import typing
 from datetime import datetime
 from colorama import Fore, Style
 import inspect
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from classes.Telegrambot import CTelegramBot
 
 # Ensure logs directory exists
 log_directory = './logs'
@@ -105,6 +109,7 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
         if "NoneType" not in exc_info:
             full_message = f"{base_message}\n[Traceback]\n{exc_info}"
             logger(full_message) # type: ignore
+            CTelegramBot.send_message(text= "❌" + base_message + "❌")
         else:
             logger(base_message) # type: ignore
     else:
@@ -118,7 +123,7 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
         print(color + style + base_message + Style.RESET_ALL) # type: ignore
 
     # Optionally, print traceback to terminal as well
-    if The_type_of_log in {"error", "critical"} and "NoneType" not in exc_info: # type: ignore
-        print(Fore.LIGHTBLACK_EX + Style.DIM + exc_info + Style.RESET_ALL) # type: ignore
+    # if The_type_of_log in {"error", "critical"} and "NoneType" not in exc_info: # type: ignore
+    #     print(Fore.LIGHTBLACK_EX + Style.DIM + exc_info + Style.RESET_ALL) # type: ignore
 
-        print(color + style + The_message + Style.RESET_ALL) # type: ignore
+    #     print(color + style + The_message + Style.RESET_ALL) # type: ignore
