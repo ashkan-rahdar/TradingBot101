@@ -135,6 +135,8 @@ class Metatrader_Module_Class:
             "Sell Limit": self.mt.ORDER_TYPE_SELL_LIMIT
         }
         self.reverse_order_type_mapping = {value: key for key, value in self.order_type_mapping.items()}
+        self.initialize_mt5_Function()
+        self.login_mt5_Function()
 
     def Open_position_Function(self, 
                             order_type: typing.Literal["Buy", "Sell", "Buy Limit", "Sell Limit"], 
@@ -183,23 +185,24 @@ class Metatrader_Module_Class:
         try:        
             order_type_INT = self.order_type_mapping.get(order_type, None)
             # Get number of decimal places for the asset dynamically
-            symbol_info = self.mt.symbol_info(ticker) # type: ignore
+            symbol_info = self.mt.symbol_info(ticker)  # type: ignore
             if symbol_info is None:
                 print(f"Error: Could not retrieve symbol info for {ticker}")
                 return None, None
-            
+
             digits = symbol_info.digits
-            
+            tick_size = symbol_info.trade_tick_size
             tick_value = symbol_info.trade_tick_value
             commission_per_lot = config["account_info"]["commision"]
-            total_commission = commission_per_lot * vol
+            commission = vol * commission_per_lot
+            commission_price_offset = (commission / tick_value) * tick_size
 
-            # Adjust SL for commission
-            sl_adjusted = sl
-            if order_type == "Buy" or order_type == "Buy Limit":
-                sl_adjusted = sl - (total_commission / tick_value)
-            elif order_type == "Sell" or order_type == "Sell Limit":
-                sl_adjusted = sl + (total_commission / tick_value)# Number of decimal places for the symbol
+            if order_type in ["Buy", "Buy Limit"]:
+                sl_adjusted = sl - commission_price_offset
+            elif order_type in ["Sell", "Sell Limit"]:
+                sl_adjusted = sl + commission_price_offset
+            else:
+                sl_adjusted = sl
 
             request = {
                 "action": self.mt.TRADE_ACTION_DEAL if (order_type_INT is not None and order_type_INT < 2) else self.mt.TRADE_ACTION_PENDING,
@@ -310,7 +313,6 @@ class Metatrader_Module_Class:
             - The `comment` field in the request is set to "Order Removed" to provide
               additional context for the action.
         """
-        
         # Create the request
         request = {
             "action": self.mt.TRADE_ACTION_REMOVE,
@@ -321,7 +323,7 @@ class Metatrader_Module_Class:
         order_result = self.mt.order_send(request) # type: ignore
         return order_result
     
-    async def initialize_mt5_Function(self):
+    def initialize_mt5_Function(self):
         """
         Asynchronously initializes the MetaTrader5 trading platform.
         This function attempts to initialize the MetaTrader5 platform using the `initialize` method 
@@ -338,12 +340,11 @@ class Metatrader_Module_Class:
               or failure of the initialization.
             - The `print_and_logging_Function` is used to log an error message in case of failure.
         """
-        
         if not self.mt.initialize(): # type: ignore
             print_and_logging_Function("error", "MetaTrader5 initialization failed", "title")
             raise RuntimeError("MetaTrader5 initialization failed")
 
-    async def login_mt5_Function(self):
+    def login_mt5_Function(self):
         """
         Asynchronous function to log in to MetaTrader5 using account credentials.
         This function attempts to log in to the MetaTrader5 platform using the 
@@ -359,8 +360,6 @@ class Metatrader_Module_Class:
             - Calls `print_and_logging_Function` to log an error message if the login fails.
             - Raises an exception to indicate a critical failure in the login process.
         """
-        
-        global config
         if not self.mt.login(config["account_info"]["login"], config["account_info"]["password"], config["account_info"]["server"]): # type: ignore
             print_and_logging_Function("error", "MetaTrader5 login failed", "title")
             raise RuntimeError("MetaTrader5 login failed")
@@ -444,11 +443,10 @@ class Metatrader_Module_Class:
             6. Handles any exceptions that occur during the process and logs the error.
             7. Returns the fetched data as a pandas DataFrame, or an empty DataFrame 
                in case of an error.
-        """
-        
+        """        
         try:
-            await self.initialize_mt5_Function()
-            await self.login_mt5_Function()
+            self.initialize_mt5_Function()
+            self.login_mt5_Function()
             print_and_logging_Function("info",  f"Fetching {atimeframe} Data...", "description")
             The_data = await self.fetch_data_Function(atimeframe, aDataset)
             if len(The_data) > 0:

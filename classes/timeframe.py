@@ -620,5 +620,26 @@ class Timeframe_Class:
                 print_and_logging_Function("info", f"{new_opened_positions} New positions opened and inserted in DB", "title")
         except Exception as e:
             print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
+      
+    async def Closing_positions_Function(self):
+        try:
+            CTelegramBot.send_message(text="Cancel all positions (Not valid time to trade)")
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions (Not valid time to trade): {e}")
             
+        try:
+            open_position_IDs = await self.CMySQL_DataBase.Read_Open_Positions_Function()
+            cancelled_positions_IDs : list[int] = []
+            for open_position_id in open_position_IDs:
+                result = CMetatrader_Module.cancel_order(open_position_id)
+                if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
+                    print_and_logging_Function("error", f"Error in canceling {open_position_id} position: {result}", "title")
+                else:
+                    print_and_logging_Function("info", f"Cancelled order {open_position_id}", "description")
+                    cancelled_positions_IDs.append(open_position_id)
+                    
+            await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in canceling positions: {e}")
+              
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

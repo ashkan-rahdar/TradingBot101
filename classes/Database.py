@@ -157,18 +157,6 @@ class Database_Class:
                     WHERE Traded_DP = NEW.id AND Result <> NEW.Result;
                 END IF;
             END
-            """,
-            f"""
-            CREATE TRIGGER trg_update_dp_result
-            AFTER UPDATE ON {self.Positions_table_name}
-            FOR EACH ROW
-            BEGIN
-                IF NEW.Result <> OLD.Result THEN
-                    UPDATE {self.important_dps_table_name}
-                    SET Result = NEW.Result
-                    WHERE id = NEW.Traded_DP AND Result <> NEW.Result;
-                END IF;
-            END
             """
         ]
 
@@ -672,7 +660,7 @@ class Database_Class:
         query = f"""
             INSERT INTO {self.Positions_table_name} 
             (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID, Probability, Result)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE Traded_DP = Traded_DP
         """
 
@@ -737,3 +725,44 @@ class Database_Class:
         except Exception as e:
             print_and_logging_Function("error", f"Error in fetching ML Dataset: {e}", "title")
             return pd.DataFrame(), pd.DataFrame()
+    
+    async def Read_Open_Positions_Function(self) -> list[int]:
+        if self.db_pool is None:
+            await self.initialize_db_pool_Function()
+
+        try:
+            async with self.db_pool.acquire() as conn: # type: ignore
+                async with conn.cursor() as cursor:
+                    await cursor.execute(f"""
+                        SELECT Order_ID
+                        FROM {self.Positions_table_name}
+                        WHERE Result = 0
+                    """)
+                    rows = await cursor.fetchall()
+
+                    # Convert list of tuples to list of integers
+                    order_IDs = [row[0] for row in rows]
+
+                    print_and_logging_Function("info", f"ID Open positions: {order_IDs}", "description")
+                    return order_IDs
+
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in fetching open positions: {e}", "title")
+            return []
+
+    async def remove_cancelled_positions_Function(self, cancelled_list: list[int]):
+        if self.db_pool is None:
+            await self.initialize_db_pool_Function()
+        try:
+            self.Traded_DP_Set -= set(cancelled_list)
+            async with self.db_pool.acquire() as conn: # type: ignore
+                async with conn.cursor() as cursor:
+                    if cancelled_list:
+                        # Create a comma-separated string of placeholders (%s, %s, ...)
+                        placeholders = ','.join(['%s'] * len(cancelled_list))
+                        query = f"DELETE FROM {self.Positions_table_name} WHERE Order_ID IN ({placeholders})"
+                        await cursor.execute(query, cancelled_list)
+                        await conn.commit()
+                        print_and_logging_Function("info",f"Removed {cancelled_list} cancelled positions from DB and memory.", "description")
+        except Exception as e:
+            raise Exception(f"Error in removing the cancelled positions from DB: {e}")

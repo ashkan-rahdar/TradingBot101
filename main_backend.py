@@ -18,7 +18,7 @@ from functions.logger import print_and_logging_Function  # noqa: E402
 from functions.run_with_retries import run_with_retries_Function  # noqa: E402
 from classes.timeframe import CTimeFrames  # noqa: E402
 from classes.Metatrader_Module import CMetatrader_Module  # noqa: E402
-from classes.Telegrambot import TelegramBot_loop_Funciton  # noqa: E402
+from functions.utilities import is_trading_hours_now, TelegramBot_loop_Funciton  # noqa: E402
 import parameters  # noqa: E402
 
 # Load JSON config file
@@ -213,39 +213,36 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
     except Exception as e:
         print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
 
-async def main():
-    """
-    The `main` function serves as the primary asynchronous entry point for the trading bot's backend logic. 
-    It continuously executes tasks for each configured trading timeframe until an emergency flag is triggered.
-    Functionality:
-    - Iterates over a list of trading timeframes defined in the configuration.
-    - For each timeframe, it creates and schedules an asynchronous task to process trading logic using `Each_TimeFrame_Function`.
-    - Handles exceptions that may occur during the execution of the main loop, logging critical errors and triggering emergency actions if necessary.
-    - If the emergency flag (`parameters.The_emergency_flag`) is set, it performs predefined emergency actions.
-    Inputs:
-    - This function does not take any direct arguments. Instead, it relies on global variables and configurations:
-        - `parameters.The_emergency_flag`: A boolean flag indicating whether an emergency has occurred.
-        - `config["trading_configs"]["timeframes"]`: A list of timeframes for which trading tasks are executed.
-        - `Each_TimeFrame_Function`: An asynchronous function that processes trading logic for a specific timeframe.
-        - `print_and_logging_Function`: A utility function for logging messages with different severity levels.
-        - `The_emergency_event`: An event object used to signal emergency conditions.
-    Outputs:
-    - The function does not return any value. It performs its operations asynchronously and relies on side effects such as:
-        - Logging messages to indicate progress or errors.
-        - Scheduling and executing trading tasks for each timeframe.
-        - Triggering emergency actions when necessary.
-    """
-    
+async def main():   
     while not parameters.shutdown_flag:
         try:
+            if not (is_trading_hours_now() or config['runtime']['develop_mode']):
+                print_and_logging_Function("info", "Outside trading hours. Closing positions and sleeping until next Valid Time...", "title")
+                
+                for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
+                    print_and_logging_Function("info", f"Closing Postions of {The_timeframe}", "description")
+                    await CTimeFrames[The_index].Closing_positions_Function()
+
+                while not is_trading_hours_now():
+                    await asyncio.sleep(60)
+                    if parameters.shutdown_flag:
+                        break
+                
+                print_and_logging_Function("info", "Inside trading hours. Starting Bot again...", "title")
+                continue
+            
+            if parameters.shutdown_flag:
+                break
+            
             tasks = []
             for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
                 print_and_logging_Function("info", f"TimeFrame {The_timeframe} :", "description")
-
                 task = asyncio.create_task(Each_TimeFrame_Function(The_index, The_timeframe))
                 tasks.append(task)
+
                 if parameters.shutdown_flag:
                     break
+
             await asyncio.gather(*tasks, return_exceptions=True)
 
         except Exception as The_error:
@@ -253,8 +250,7 @@ async def main():
             parameters.shutdown_flag = True
 
     if parameters.shutdown_flag:
-        # Perform emergency actions here
-        print_and_logging_Function("critical", "an example of emergency actions is this print", "title")
+        print_and_logging_Function("critical", "Shutdown flag is active. Performing emergency actions.", "title")
         sys.exit(1)
 
 if __name__ == "__main__":
