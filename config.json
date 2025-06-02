@@ -23,6 +23,6 @@
             "password": "ashkan"
         }, 
         "Able_to_Open_positions": true, 
-        "develop_mode" : false
+        "develop_mode" : true
     }
 }
