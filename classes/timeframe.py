@@ -623,9 +623,10 @@ class Timeframe_Class:
       
     async def Closing_positions_Function(self):
         try:
-            CTelegramBot.send_message(text="Cancel all positions (Not valid time to trade)")
+            CTelegramBot.send_message(text="⚠️ **Attention: Closing Positions**\n\nDue to system conditions, please **close all open positions immediately** to avoid potential risk. Please wait for further notice.")
+
         except Exception as e:
-            print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions (Not valid time to trade): {e}")
+            print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
             
         try:
             open_position_IDs = await self.CMySQL_DataBase.Read_Open_Positions_Function()

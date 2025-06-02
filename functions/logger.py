@@ -109,7 +109,7 @@ def print_and_logging_Function(The_type_of_log: typing.Literal["error", "warning
         if "NoneType" not in exc_info:
             full_message = f"{base_message}\n[Traceback]\n{exc_info}"
             logger(full_message) # type: ignore
-            CTelegramBot.send_message(text= "❌" + base_message + "❌")
+            CTelegramBot.send_message(text= "❌ **Error Detected**: \n\n" + base_message + "❌\n\n Please review the system immediately!")
         else:
             logger(base_message) # type: ignore
     else:
