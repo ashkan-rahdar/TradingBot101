@@ -100,38 +100,20 @@ async def shutdown_Function():
             print_and_logging_Function("warning", f"Not valid syntax. Your Input: {user_input}. \n Valid Inputs: {list(COMMANDS.keys())}", "title")
 
 def emergency_handler_Function(sig, frame):
-    """
-    Handles emergency stop requests by prompting the user for a password to confirm the action.
-    This function is triggered by a signal (e.g., SIGINT) and allows the user to terminate the process 
-    gracefully by entering a predefined password. If the password matches the expected value, the 
-    process exits with a status code of 1. Otherwise, the emergency stop request is ignored.
-    Args:
-        sig (int): The signal number that triggered the handler.
-        frame (FrameType): The current stack frame when the signal was received.
-    Behavior:
-        - Logs a warning message indicating that the process was terminated by the user.
-        - Prompts the user to enter a password for confirming the emergency stop.
-        - Compares the entered password with the expected password from the configuration.
-        - If the password matches, sets an emergency flag and exits the process with a status code of 1.
-        - If the password does not match, logs a message and ignores the emergency stop request.
-    Returns:
-        None
-    """
-    
-    print_and_logging_Function("warning", "Process terminated by user.", "title")
-    
-    print("\n🚨 Emergency Stop Requested! Enter Password to Confirm:")
-    user_input = input("Password: ").strip()
+    try:
+        print_and_logging_Function("warning", "Process terminated by user.", "title")
 
-    if user_input == config["runtime"]["emergency_mode"]["password"]:
-        print("✅ Emergency stop confirmed!")
-        The_emergency_flag = True  # noqa: F841
-        sys.exit(1)
-    else:
-        print("❌ Incorrect password! Ignoring emergency stop.")
+        print("\n🚨 Emergency Stop Requested! Enter Password to Confirm:")
+        user_input = input("Password: ").strip()
 
-    # sys.exit(0)
-
+        if user_input == config["runtime"]["emergency_mode"]["password"]:
+            print("✅ Emergency stop confirmed!")
+            sys.exit(1)
+        else:
+            print("❌ Incorrect password! Ignoring emergency stop.")
+    except Exception as e:
+        print_and_logging_Function("error",f"Error in shutting down bot emergency: {e}", "title")
+        
 async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
     """
     Asynchronous function `Each_TimeFrame_Function` processes data for a specific timeframe in a trading bot system.
@@ -250,7 +232,11 @@ async def main():
             parameters.shutdown_flag = True
 
     if parameters.shutdown_flag:
-        print_and_logging_Function("critical", "Shutdown flag is active. Performing emergency actions.", "title")
+        print_and_logging_Function("info", "Shutting down! Canceling all open positions and cleaning DB. Please wait...", "title")
+
+        for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
+            print_and_logging_Function("info", f"Closing Postions of {The_timeframe}", "description")
+            await CTimeFrames[The_index].Closing_positions_Function()
         sys.exit(1)
 
 if __name__ == "__main__":
