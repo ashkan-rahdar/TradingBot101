@@ -123,7 +123,7 @@ class Database_Class:
                 Ending_time DATETIME NOT NULL,
                 FTC VARCHAR(255),
                 EL VARCHAR(255),
-                MPL VARCHAR(255),
+                MPL VARCHAR(255)
             )
             """,
             f"""
