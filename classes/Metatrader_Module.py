@@ -323,6 +323,46 @@ class Metatrader_Module_Class:
         order_result = self.mt.order_send(request) # type: ignore
         return order_result
     
+    def modify_pending_order_Function(self, order_id: int, new_tp: float = 0) -> bool:
+        orders = self.mt.orders_get(ticket=order_id) # type: ignore
+        if orders is None or len(orders) == 0:
+            print_and_logging_Function("error", f"Order ID {order_id} not found or not a pending order", "title")
+            return False
+
+        order = orders[0]  # Get the pending order
+
+        if order.type not in [self.mt.ORDER_TYPE_BUY_LIMIT, self.mt.ORDER_TYPE_SELL_LIMIT]:
+            print_and_logging_Function("error", f"Order ID {order_id} is not a pending order", "title")
+            return False
+
+        # Preserve existing values if not updating
+        symbol = order.symbol
+        price = order.price_open
+        tp = new_tp if new_tp else order.tp
+        vol = order.volume_initial
+        sl = order.sl
+
+        request = {
+            "action": self.mt.TRADE_ACTION_MODIFY,
+            "order": order_id,
+            "symbol": symbol,
+            "price": price,
+            "sl": sl,
+            "tp": tp,
+            "volume": vol,
+            "type_time": order.type_time,
+            "type_filling": order.type_filling,
+        }
+
+        result = self.mt.order_send(request) # type: ignore
+
+        if result.retcode != self.mt.TRADE_RETCODE_DONE:
+            print_and_logging_Function("error", f"Failed to modify order {order_id}: Retcode={result.retcode}", "title")
+            return False
+
+        print_and_logging_Function("info", f"Successfully modified order {order_id}: TP={tp}, Vol={vol}", "title")
+        return True
+
     def initialize_mt5_Function(self):
         """
         Asynchronously initializes the MetaTrader5 trading platform.
