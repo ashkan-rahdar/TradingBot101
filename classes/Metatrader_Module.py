@@ -323,7 +323,7 @@ class Metatrader_Module_Class:
         order_result = self.mt.order_send(request) # type: ignore
         return order_result
     
-    def modify_pending_order_Function(self, order_id: int, new_tp: float = 0) -> bool:
+    def modify_pending_order_Function(self, order_id: int, new_tp: float = 0,ticker: str = config["trading_configs"]["asset"]) -> bool:
         orders = self.mt.orders_get(ticket=order_id) # type: ignore
         if orders is None or len(orders) == 0:
             print_and_logging_Function("error", f"Order ID {order_id} not found or not a pending order", "title")
@@ -334,7 +334,13 @@ class Metatrader_Module_Class:
         if order.type not in [self.mt.ORDER_TYPE_BUY_LIMIT, self.mt.ORDER_TYPE_SELL_LIMIT]:
             print_and_logging_Function("error", f"Order ID {order_id} is not a pending order", "title")
             return False
+        
+        symbol_info = self.mt.symbol_info(ticker)  # type: ignore
+        if symbol_info is None:
+            print(f"Error: Could not retrieve symbol info for {ticker}")
+            return False
 
+        digits = symbol_info.digits
         # Preserve existing values if not updating
         symbol = order.symbol
         price = order.price_open
@@ -346,9 +352,9 @@ class Metatrader_Module_Class:
             "action": self.mt.TRADE_ACTION_MODIFY,
             "order": order_id,
             "symbol": symbol,
-            "price": price,
-            "sl": sl,
-            "tp": tp,
+            "price": round(price, digits),  # Dynamically rounding based on symbol
+            "sl": round(sl, digits),
+            "tp": round(tp, digits),
             "volume": vol,
             "type_time": order.type_time,
             "type_filling": order.type_filling,
