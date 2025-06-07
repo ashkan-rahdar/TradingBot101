@@ -88,7 +88,6 @@ class Flag_Class:
                                                 flag_type = EL_direction,
                                                 start_of_index= self.Start_index)
             self.EL.type = "EL"
-            self.weight = self.weight_of_flag_Function()
             self.status :typing.Literal["Major", "Minor","Undefined"] = "Major"
             
 
@@ -204,19 +203,6 @@ class Flag_Class:
             else:
                 DP.weight = 0
         return DP
-    
-    def weight_of_flag_Function(self):
-        weights = []
-        
-        max_weight  = config["trading_configs"]["risk_management"]["max_wieght"] 
-        # duration of flag
-
-        if(self.length / 15 < max_weight): 
-            weights.append(self.length / 15)
-        else: 
-            weights.append(max_weight)
-        
-        return sum(weights)
     
     def DP_feature_extraction_Function(self, aDP: DP_Parameteres_Class, Dataset: pd.DataFrame):
         if aDP.trade_direction == "Bullish":

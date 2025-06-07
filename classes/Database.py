@@ -124,7 +124,6 @@ class Database_Class:
                 FTC VARCHAR(255),
                 EL VARCHAR(255),
                 MPL VARCHAR(255),
-                weight FLOAT NOT NULL
             )
             """,
             f"""
@@ -229,7 +228,7 @@ class Database_Class:
                         # Flag
                         flag_values.append((
                             flag.Unique_point, flag.flag_type, high_id, low_id, 
-                            flag.Start_time, flag.End_time, ftc_id, el_id, mpl_id, flag.weight
+                            flag.Start_time, flag.End_time, ftc_id, el_id, mpl_id
                         ))
 
                         # High Point
@@ -302,8 +301,8 @@ class Database_Class:
 
                     await cursor.executemany(
                         f"""INSERT INTO {self.flags_table_name} 
-                            (Unique_Point, type, High, Low, Starting_time, Ending_time, FTC, EL, MPL, weight)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            (Unique_Point, type, High, Low, Starting_time, Ending_time, FTC, EL, MPL)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ON DUPLICATE KEY UPDATE Unique_Point = Unique_Point""",
                         flag_values
                     )

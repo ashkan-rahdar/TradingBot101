@@ -13,8 +13,8 @@
         "risk_management":{
             "MIN_Risk" : 0.1,
             "MIN_Prob": 0.80,
-            "MAX_Risk": 4,
-            "max_wieght": 10000000
+            "MAX_Risk": 1.0,
+            "Retrain_Every" : 2
         }
     },
     "runtime":{
