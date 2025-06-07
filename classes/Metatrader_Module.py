@@ -339,14 +339,18 @@ class Metatrader_Module_Class:
         if symbol_info is None:
             print(f"Error: Could not retrieve symbol info for {ticker}")
             return False
-
+        
         digits = symbol_info.digits
-        # Preserve existing values if not updating
-        symbol = order.symbol
-        price = order.price_open
-        tp = new_tp if new_tp else order.tp
-        vol = order.volume_initial
-        sl = order.sl
+        
+        if round(new_tp,digits) != order.tp:            
+            symbol = order.symbol
+            price = order.price_open
+            tp = round(new_tp,digits)
+            vol = order.volume_initial
+            sl = order.sl
+        else: 
+            print_and_logging_Function("warning", f"Wrong modify order {order_id} requested. TP has not changed", "title")
+            return False
 
         request = {
             "action": self.mt.TRADE_ACTION_MODIFY,
