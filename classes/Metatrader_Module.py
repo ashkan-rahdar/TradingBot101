@@ -323,55 +323,52 @@ class Metatrader_Module_Class:
         order_result = self.mt.order_send(request) # type: ignore
         return order_result
     
-    def modify_pending_order_Function(self, order_id: int, new_tp: float = 0,ticker: str = config["trading_configs"]["asset"]) -> bool:
-        orders = self.mt.orders_get(ticket=order_id) # type: ignore
-        if orders is None or len(orders) == 0:
-            print_and_logging_Function("error", f"Order ID {order_id} not found or not a pending order", "title")
-            return False
+    def modify_pending_order_Function(self, order_id: int, new_tp: float = 0,ticker: str = config["trading_configs"]["asset"]):
+        try:
+            orders = self.mt.orders_get(ticket=order_id) # type: ignore
+            if orders is None or len(orders) == 0:
+                raise Exception(f"Order ID {order_id} not found or not a pending order")
 
-        order = orders[0]  # Get the pending order
+            order = orders[0]  # Get the pending order
 
-        if order.type not in [self.mt.ORDER_TYPE_BUY_LIMIT, self.mt.ORDER_TYPE_SELL_LIMIT]:
-            print_and_logging_Function("error", f"Order ID {order_id} is not a pending order", "title")
-            return False
-        
-        symbol_info = self.mt.symbol_info(ticker)  # type: ignore
-        if symbol_info is None:
-            print(f"Error: Could not retrieve symbol info for {ticker}")
-            return False
-        
-        digits = symbol_info.digits
-        
-        if round(new_tp,digits) != order.tp:            
-            symbol = order.symbol
-            price = order.price_open
-            tp = round(new_tp,digits)
-            vol = order.volume_initial
-            sl = order.sl
-        else: 
-            print_and_logging_Function("warning", f"Wrong modify order {order_id} requested. TP has not changed", "title")
-            return False
+            if order.type not in [self.mt.ORDER_TYPE_BUY_LIMIT, self.mt.ORDER_TYPE_SELL_LIMIT]:
+                raise Exception(f"Order ID {order_id} is not a pending order")
+            
+            symbol_info = self.mt.symbol_info(ticker)  # type: ignore
+            if symbol_info is None:
+                raise Exception(f"Could not retrieve symbol info for {ticker}")
+            
+            digits = symbol_info.digits
+            
+            if round(new_tp,digits) != order.tp:            
+                symbol = order.symbol
+                price = order.price_open
+                tp = round(new_tp,digits)
+                vol = order.volume_initial
+                sl = order.sl
+            else: 
+                return
 
-        request = {
-            "action": self.mt.TRADE_ACTION_MODIFY,
-            "order": order_id,
-            "symbol": symbol,
-            "price": round(price, digits),  # Dynamically rounding based on symbol
-            "sl": round(sl, digits),
-            "tp": round(tp, digits),
-            "volume": vol,
-            "type_time": order.type_time,
-            "type_filling": order.type_filling,
-        }
+            request = {
+                "action": self.mt.TRADE_ACTION_MODIFY,
+                "order": order_id,
+                "symbol": symbol,
+                "price": round(price, digits),  # Dynamically rounding based on symbol
+                "sl": round(sl, digits),
+                "tp": round(tp, digits),
+                "volume": vol,
+                "type_time": order.type_time,
+                "type_filling": order.type_filling,
+            }
 
-        result = self.mt.order_send(request) # type: ignore
+            result = self.mt.order_send(request) # type: ignore
 
-        if result.retcode != self.mt.TRADE_RETCODE_DONE:
-            print_and_logging_Function("error", f"Failed to modify order {order_id}: Retcode={result.retcode}", "title")
-            return False
+            if result.retcode != self.mt.TRADE_RETCODE_DONE:
+                raise Exception(f"Failed to modify order {order_id}: Retcode={result.retcode}")
 
-        print_and_logging_Function("info", f"Successfully modified order {order_id}: TP={tp}, Vol={vol}", "title")
-        return True
+            print_and_logging_Function("info", f"Successfully modified order {order_id}: TP={tp}, Vol={vol}", "title")
+        except Exception as e:
+            raise Exception(f"Error in modify TP of {order_id}: {e}")
 
     def initialize_mt5_Function(self):
         """
