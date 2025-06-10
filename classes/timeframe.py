@@ -8,6 +8,7 @@ import numpy as np
 import datetime
 import random
 import typing
+import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss
 from catboost import CatBoostClassifier, Pool
@@ -30,6 +31,7 @@ from classes.Telegrambot import CTelegramBot
 TARGET_PROB = config["trading_configs"]["risk_management"]["MIN_Prob"]
 MAX_RISK = config["trading_configs"]["risk_management"]["MAX_Risk"]
 MIN_RISK = config["trading_configs"]["risk_management"]["MIN_Risk"]
+RETRAIN_EVERY = config["trading_configs"]["risk_management"]["Retrain_Every"]
 
 class Timeframe_Class:
     """
@@ -337,41 +339,58 @@ class Timeframe_Class:
         probs = []
         self.Do_Trade_DpList : list[tuple[DP_Parameteres_Class, typing.Union[str, None], int, int]] = []
         X_FTC, Y_FTC = await self.CMySQL_DataBase.Read_ML_table_Function()
-        FTC_models = self.RR_ML_Training(RR_levels, X_FTC, Y_FTC, "FTC")
+        FTC_models, model_weights = self.RR_ML_Training(RR_levels, X_FTC, Y_FTC, "FTC")
         DP_TradeList = await self.CMySQL_DataBase._get_tradeable_DPs_Function(self.Tradeable_DPs)
         
-        if any(map(lambda k: k != k, FTC_models.keys())):
+        if any(np.isnan(k) for k in FTC_models.keys()):
             return
         
         for i in range(len(DP_TradeList)):
             The_DP = DP_TradeList[i]
-            # print(The_DP)
             if(The_DP.type != "FTC"): 
                 continue
 
-            probs = []
-            for rr in RR_levels:
-                model = FTC_models[rr]
-                prob = model.predict_proba(The_DP.to_model_input_Function())[0, 1]
-                probs.append(prob)
+            probs = np.array([
+                    FTC_models[rr].predict_proba(The_DP.to_model_input_Function())[0, 1] for rr in RR_levels
+                ])
 
-            probs = np.array(probs)
-            reliable_idx = np.where(probs >= TARGET_PROB)[0]
-
-            if reliable_idx.size == 0:
+            # Enforce monotonicity (with a threshold)
+            if not np.all(probs[:-1] + 0.05 >= probs[1:]):
                 continue
-            
+
+            reliable_idx = [i for i, p in enumerate(probs) if p >= TARGET_PROB]
+            if not reliable_idx:
+                continue
+
+            weighted_score = sum(probs[i] * model_weights[RR_levels[i]] for i in reliable_idx)
+            weight_sum = sum(model_weights[RR_levels[i]] for i in reliable_idx)
+            confidence = weighted_score / weight_sum if weight_sum != 0 else 0.0
+
+            if confidence < TARGET_PROB:
+              continue
             best_rr_idx = reliable_idx[-1]
-            best_rr = RR_levels[best_rr_idx]
-            prob = probs[best_rr_idx]
+            if all(probs[i] >= TARGET_PROB for i in range(best_rr_idx + 1)):
+              best_rr = RR_levels[best_rr_idx]
+              trade_risk = ((confidence - TARGET_PROB) / (1.0 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
+              self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), trade_risk, best_rr))
 
-            Trade_Risk = ((prob - TARGET_PROB) / (1.0 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
-
-            # Now update the tuple
-            self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), Trade_Risk, best_rr))
-
-    def RR_ML_Training(self, RR_values: np.ndarray, Input: pd.DataFrame, Output: pd.DataFrame, DP_type: str = "FTC") -> dict[float, CatBoostClassifier]:
+    def RR_ML_Training(self, RR_values: np.ndarray, Input: pd.DataFrame, Output: pd.DataFrame, DP_type: str = "FTC") -> tuple[dict[float, CatBoostClassifier], dict[float, float]]:
         try:
+            # --- Load Counter ---
+            self.retrain_counters = getattr(self, 'retrain_counters', {})
+            self.retrain_counters[DP_type] = self.retrain_counters.get(DP_type, 0) + 1
+
+            model_cache_path = f"{DP_type}_{self.timeframe}_models.pkl"
+
+            # --- Use Cached Models if Available and Not Due for Retrain ---
+            if os.path.exists(model_cache_path) and self.retrain_counters[DP_type] < RETRAIN_EVERY:
+                with open(model_cache_path, "rb") as f:
+                    models, model_weights = pickle.load(f)
+                print_and_logging_Function("info", f"ML Engine {self.timeframe}: Using cached model for DP type '{DP_type}'. Retraining in {RETRAIN_EVERY - self.retrain_counters[DP_type]} iterations.","title")
+                return models, model_weights
+
+            # --- Otherwise, Retrain and Overwrite Cache ---
+            self.retrain_counters[DP_type] = 0  # Reset counter
             X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state = self.RANDOM_STATE)
             categorical_features = ["Is_related_DP_used", "Is_golfed", "Is_used_half"]
             
@@ -380,7 +399,7 @@ class Timeframe_Class:
             metrics_test = {}
             
             for rr in RR_values:
-                print_and_logging_Function("info", f"Training the {rr} model for {DP_type}", "title")
+                print_and_logging_Function("info", f"Training the {rr} model for {DP_type} {self.timeframe}", "title")
                 # Binary label for this RR
                 y_train_bin = (y_train >= rr).astype(int)
                 y_test_bin = (y_test >= rr).astype(int)
@@ -389,19 +408,19 @@ class Timeframe_Class:
                 train_pool = Pool(X_train, label=y_train_bin, cat_features=categorical_features)
                 test_pool = Pool(X_test, label=y_test_bin, cat_features=categorical_features)
                 
-                # Model
                 model = CatBoostClassifier(
                     iterations=1000,
                     learning_rate=0.01,
                     depth=6,
                     loss_function='Logloss',
                     eval_metric='AUC',
-                    l2_leaf_reg= 5,
+                    l2_leaf_reg=5,
                     bootstrap_type='Bayesian',
                     random_strength=5,
-                    boosting_type='Plain',
+                    boosting_type='Ordered',
                     early_stopping_rounds=50,
-                    verbose=100,
+                    auto_class_weights='Balanced',  # Or use scale_pos_weight manually
+                    verbose=False,
                     allow_writing_files=False
                 )
                 model.fit(train_pool)
@@ -429,49 +448,55 @@ class Timeframe_Class:
             for rr, score in metrics_test.items():
                 print_and_logging_Function("info", f"RR {rr:.2f} — Test AUC: {score['AUC']:.3f}, Test Brier: {score['Brier']:.3f}", "description")
                 
-            # Backtest on test dataset
+            model_weights: dict[float, float] = {rr: (metrics_test[rr]["AUC"]**2) * (1 - metrics_test[rr]["Brier"]) for rr in RR_values}
+            # Backtest filtering logic on test dataset
             result_on_test = 0
-            succeeded_trades  = 0
-            totaltrades = 0
+            succeeded_trades = 0
+            total_trades = 0
+
             for i in range(len(X_test)):
                 probs = []
                 for rr in RR_values:
-                    model = models[rr]
-                    prob = model.predict_proba(X_test.iloc[[i]])[0, 1]
-                    probs.append(prob)
+                    probs.append(models[rr].predict_proba(X_test.iloc[[i]])[0, 1])
 
                 probs = np.array(probs)
-                reliable_idx = np.where(probs >= TARGET_PROB)[0]
 
-                if reliable_idx.size > 0:
+                # Enforce monotonicity (with a threshold)
+                if not np.all(probs[:-1] + 0.05 >= probs[1:]):
+                    continue
+
+                reliable_idx = [i for i, p in enumerate(probs) if p >= TARGET_PROB]
+                if not reliable_idx:
+                    continue
+
+                weighted_score = sum(probs[i] * model_weights[RR_values[i]] for i in reliable_idx)
+                weight_sum = sum(model_weights[RR_values[i]] for i in reliable_idx)
+                confidence = weighted_score / weight_sum if weight_sum != 0 else 0
+
+                if confidence >= TARGET_PROB:
                     best_rr_idx = reliable_idx[-1]
                     best_rr = RR_values[best_rr_idx]
-                    prob = probs[best_rr_idx]
-                else:
-                    best_rr = 0.0
-                    prob = 0.0
-
-                Trade_Risk = ((prob - TARGET_PROB) / (1.0 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
-
-                if best_rr != 0:
-                    if y_test.iloc[i].item() >= best_rr:
-                        result_on_test += Trade_Risk*best_rr
-                        succeeded_trades += 1
-                        totaltrades += 1
-                    else:
-                        result_on_test -= Trade_Risk
-                        totaltrades += 1
-            
-            winrate = succeeded_trades / totaltrades
-            print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test} percent profit with the {winrate} winrate in {totaltrades} trades", "title")
-            if winrate <= 0.6 and result_on_test <= 0 :
+                    if all(probs[i] >= TARGET_PROB for i in range(best_rr_idx + 1)):
+                        if y_test.iloc[i].item() >= best_rr:
+                            result_on_test += ((confidence - TARGET_PROB) / (1 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) * best_rr + MIN_RISK * best_rr
+                            succeeded_trades += 1
+                        else:
+                            result_on_test -= ((confidence - TARGET_PROB) / (1 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
+                        total_trades += 1
+            winrate = succeeded_trades / total_trades if total_trades > 0 else 0
+            print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test} percent profit with the {winrate} winrate in {total_trades} trades", "title")
+            if winrate <= (TARGET_PROB**2) and result_on_test <= 0 :
                 models = {float("nan"): CatBoostClassifier()} 
                 self.RANDOM_STATE = random.randint(10, 50)
                 print_and_logging_Function("warning", "Based on current data Bot is not profitable", "title")
-            return models
+                
+            # Save updated models and weights
+            with open(model_cache_path, "wb") as f:
+                pickle.dump((models, model_weights), f)
+            return models, model_weights
         except RuntimeError as The_error:
             print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{The_error}", "title")
-            return {float("nan"): CatBoostClassifier()} 
+            return {float("nan"): CatBoostClassifier()} , {}
     
     async def Update_Positions_Function(self):
         """
@@ -560,7 +585,8 @@ class Timeframe_Class:
         inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, int, float]] = []
 
         for aDP, The_index, Estimated_Risk, Estimated_RR in self.Do_Trade_DpList:
-            if The_index not in self.CMySQL_DataBase.Traded_DP_Set:
+            # Trade new detected DPs
+            if The_index not in self.CMySQL_DataBase.Traded_DP_Dict.keys():
                 try:
                     probability = ((Estimated_Risk - MIN_RISK) / (MAX_RISK - MIN_RISK)) * (1.0 - TARGET_PROB) + TARGET_PROB
                     if aDP.trade_direction == "Bullish":    
@@ -570,7 +596,7 @@ class Timeframe_Class:
                             price=          aDP.High.price,
                             sl=             aDP.Low.price,
                             tp=             aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price),
-                            comment =       f"{int(probability * 100)}% chance",
+                            comment =       f"{int(probability * 100)}% chance, {self.timeframe}",
                             
                         )
                     else:
@@ -580,7 +606,7 @@ class Timeframe_Class:
                             price=          aDP.Low.price,
                             sl=             aDP.High.price,
                             tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
-                            comment =       f"{int(probability * 100)}% chance",
+                            comment =       f"{int(probability * 100)}% chance, {self.timeframe}",
                         )
                     if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
                         print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
@@ -605,7 +631,7 @@ class Timeframe_Class:
 
                         new_opened_positions += 1
                         print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
-                        self.CMySQL_DataBase.Traded_DP_Set.add(The_index)
+                        self.CMySQL_DataBase.Traded_DP_Dict[The_index] = {"TP": result.request.tp, "Vol": result.request.volume, "Order_ID": result.order} # type: ignore
                         try:
                             CTelegramBot.notify_placed_position(order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100)) # type: ignore
                         except Exception as e:
@@ -613,31 +639,65 @@ class Timeframe_Class:
 
                 except RuntimeError as e:
                     print_and_logging_Function("error", f"Error in opening the position of DP No. {The_index}: {e}")
-                     
+            # Modify Trades which their info has been changed
+            else:
+                try:
+                    previous_info = self.CMySQL_DataBase.Traded_DP_Dict[The_index] # type: ignore
+                    if aDP.trade_direction == "Bullish":    
+                        new_TP = aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price)
+                    else:
+                        new_TP = aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price)
+                    if new_TP < previous_info["TP"]:
+                        CMetatrader_Module.modify_pending_order_Function(self.CMySQL_DataBase.Traded_DP_Dict[The_index]["Order_ID"], new_TP) # type: ignore
+                except Exception as e:
+                    print_and_logging_Function("error", e, "title") # type: ignore
+        
+        # insert The new positions in DB
         try:
             await self.CMySQL_DataBase._insert_positions_batch(inserting_positions_DB)
             if new_opened_positions:
                 print_and_logging_Function("info", f"{new_opened_positions} New positions opened and inserted in DB", "title")
         except Exception as e:
             print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
+            
+        # Cancel positions which are not valid anymore
+        try:
+            Pending_position_IDs = await self.CMySQL_DataBase.Read_Pending_Positions_Function()  # noqa: F841
+            valid_trade_indices = {The_index for _, The_index, _, _ in self.Do_Trade_DpList}  # noqa: F841
+            cancelled_positions_IDs : dict[str, int] = {}
+            
+            for The_index, order_ID in Pending_position_IDs.items():
+                if The_index not in valid_trade_indices:
+                    result = CMetatrader_Module.cancel_order(order_ID)
+                    if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
+                        print_and_logging_Function("error", f"Error in canceling {order_ID} position: {result}", "title")
+                    else:
+                        print_and_logging_Function("info", f"Cancelled order {order_ID}. No more valid position", "description")
+                        cancelled_positions_IDs[The_index] = order_ID
+                        
+            
+            await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in canceling invalid positions: {e}", "title")    
       
     async def Closing_positions_Function(self):
+        # Alert users in Telegram
         try:
-            CTelegramBot.send_message(text="⚠️Attention: Closing Positions⚠️\n\nDue to system conditions, please close all open positions immediately to avoid potential risk. Please wait for further notice.")
-
+            CTelegramBot.send_message(text="⚠️Attention: Closing Positions⚠️\n\nDue to system conditions, please close all Pending positions immediately to avoid potential risk. Please wait for further notice.")
         except Exception as e:
             print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
-            
+        
+        # Cancel pending positions and remove from DB and memory
         try:
-            open_position_IDs = await self.CMySQL_DataBase.Read_Open_Positions_Function()
-            cancelled_positions_IDs : list[int] = []
-            for open_position_id in open_position_IDs:
-                result = CMetatrader_Module.cancel_order(open_position_id)
+            Pending_position_IDs = await self.CMySQL_DataBase.Read_Pending_Positions_Function()
+            cancelled_positions_IDs : dict[str, int] = {}
+            for DP_Index, order_ID in Pending_position_IDs.items():
+                result = CMetatrader_Module.cancel_order(order_ID)
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
-                    print_and_logging_Function("error", f"Error in canceling {open_position_id} position: {result}", "title")
+                    print_and_logging_Function("error", f"Error in canceling {order_ID} position: {result}", "title")
                 else:
-                    print_and_logging_Function("info", f"Cancelled order {open_position_id}", "description")
-                    cancelled_positions_IDs.append(open_position_id)
+                    print_and_logging_Function("info", f"Cancelled order {order_ID}", "description")
+                    cancelled_positions_IDs[DP_Index] = order_ID
                     
             await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
         except Exception as e:

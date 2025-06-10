@@ -5,6 +5,7 @@ import os
 import datetime
 import aiomysql
 import pandas as pd
+import typing
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -39,13 +40,12 @@ class Database_Class:
     """
     connection_pool = pooling.MySQLConnectionPool(
         pool_name="tradingbot_pool",
-        pool_size=10,  # Adjust based on your workload
+        pool_size=12,  # Adjust based on your workload
         host="localhost",
         user="TradingBot",
         password="Nama-123456",
-        database="tradingbotdb"
+        database="tradingbotdb",
     )
-    
     def __init__(self, The_timeframe: str):
         """
         Initializes the Database class with the specified timeframe and sets up the necessary database tables.
@@ -72,7 +72,7 @@ class Database_Class:
         self.Positions_table_name = f"Positions_{The_timeframe}"
         self.TimeFrame = The_timeframe
         self.detected_flags = 0
-        self.Traded_DP_Set = set()
+        self.Traded_DP_Dict: dict[str, TradeInfo] = {}
         self.db_pool = None
         print_and_logging_Function("info", f"Database for {The_timeframe} initialized.", "description")
         
@@ -129,14 +129,14 @@ class Database_Class:
             f"""
             CREATE TABLE IF NOT EXISTS {self.Positions_table_name} (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                Traded_DP VARCHAR(255) UNIQUE,
+                Traded_DP VARCHAR(255),
                 Order_type ENUM('Buy', 'Sell', 'Buy Limit', 'Sell Limit') NOT NULL,
                 Price FLOAT NOT NULL,
                 SL FLOAT NOT NULL,
                 TP FLOAT NOT NULL,
                 Last_modified_time DATETIME NOT NULL,
                 Vol FLOAT NOT NULL,
-                Order_ID INT NOT NULL,
+                Order_ID INT NOT NULL UNIQUE,
                 Probability INT NOT NULL,
                 Result FLOAT NOT NULL DEFAULT 0
             )
@@ -186,6 +186,7 @@ class Database_Class:
                     user="TradingBot",
                     password="Nama-123456",
                     db="tradingbotdb",
+                    autocommit=True,
                     minsize=5,
                     maxsize=20)
             except Exception as e:
@@ -212,6 +213,7 @@ class Database_Class:
         """
         await self.initialize_db_pool_Function()
         async with self.db_pool.acquire() as conn: # type: ignore
+            await conn.commit()  # Ensure previous state is clean (optional but safe)
             async with conn.cursor() as cursor:
                 try:
                     await conn.begin()  # Start transaction
@@ -364,6 +366,7 @@ class Database_Class:
 
             # Execute the batch update
             async with self.db_pool.acquire() as conn: # type: ignore
+                await conn.commit()  # Ensure previous state is clean (optional but safe)
                 async with conn.cursor() as cursor:
                     await cursor.executemany(query, values)  # Perform the batch update
                     await conn.commit()  # Commit the transaction
@@ -397,6 +400,7 @@ class Database_Class:
 
             # Execute the batch update
             async with self.db_pool.acquire() as conn: # type: ignore
+                await conn.commit()  # Ensure previous state is clean (optional but safe)                
                 async with conn.cursor() as cursor:
                     await cursor.executemany(query, values)  # Perform the batch update
                     await conn.commit()  # Commit the transaction
@@ -439,6 +443,7 @@ class Database_Class:
         
         try:
             async with self.db_pool.acquire() as conn: # type: ignore
+                await conn.commit()  # Ensure previous state is clean (optional but safe)
                 async with conn.cursor() as cursor:
                     # Step 1: Get important DPs
                     await cursor.execute(f"""
@@ -463,9 +468,11 @@ class Database_Class:
                         flag_points = {str(row[0]): FlagPoint_Class(price=row[1], time=row[2]) for row in await cursor.fetchall()}
 
                     # Step 3: Fetch existing traded DPs
-                    await cursor.execute(f"SELECT DISTINCT Traded_DP FROM {self.Positions_table_name}")
-                    existing_dp_ids = {row[0] for row in await cursor.fetchall()}
-                    self.Traded_DP_Set.update(existing_dp_ids)
+                    await cursor.execute(f"SELECT Traded_DP, TP, Vol, Order_ID FROM {self.Positions_table_name}")
+                    rows = await cursor.fetchall()
+                    self.Traded_DP_Dict = {
+                        row[0]: {"TP": row[1], "Vol": row[2], "Order_ID": row[3]} for row in rows
+                    }
 
                     # Step 4: Fetch id -> Result mapping
                     await cursor.execute(f"""
@@ -537,6 +544,7 @@ class Database_Class:
 
         try:
             async with self.db_pool.acquire() as conn: # type: ignore
+                await conn.commit()  # Ensure previous state is clean (optional but safe)
                 async with conn.cursor() as cursor:
                     # 1) Fetch the requested DP rows
                     sql = f"""
@@ -651,28 +659,42 @@ class Database_Class:
             Exception: If an error occurs during the database operation, an exception is raised with
                        a descriptive error message.
         """
-        # Validate input (we assume positions are already validated)
         if not positions:
             return
 
-        # Prepare the SQL query
-        query = f"""
-            INSERT INTO {self.Positions_table_name} 
-            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID, Probability, Result)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE Traded_DP = Traded_DP
+        # Step 1: Extract Traded_DP list
+        traded_dps = [pos[0] for pos in positions]
+        placeholders = ', '.join(['%s'] * len(traded_dps))
+        check_query = f"""
+            SELECT Traded_DP FROM {self.Positions_table_name}
+            WHERE Traded_DP IN ({placeholders})
         """
 
-        # Perform the batch insert
         try:
-            async with self.db_pool.acquire() as conn: # type: ignore
+            async with self.db_pool.acquire() as conn:  # type: ignore
+                await conn.commit()  # Ensure previous state is clean (optional but safe)
                 async with conn.cursor() as cursor:
-                    # Execute the batch insert using executemany
-                    await cursor.executemany(query, positions)
+                    # Step 2: Check for existing Traded_DP entries
+                    await cursor.execute(check_query, traded_dps)
+                    existing = {row[0] for row in await cursor.fetchall()}
 
-                    # Commit the transaction
-                    await conn.commit()
-                    return
+                    # Step 3: Filter positions to insert only new ones
+                    new_positions = [pos for pos in positions if pos[0] not in existing]
+
+                    # Step 4: Insert only non-duplicate positions
+                    if new_positions:
+                        insert_query = f"""
+                            INSERT INTO {self.Positions_table_name} 
+                            (Traded_DP, Order_type, Price, SL, TP, Last_modified_time, Vol, Order_ID, Probability, Result)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                        await cursor.executemany(insert_query, new_positions)
+                        await conn.commit()
+
+                    # Step 5: Raise error if duplicates found
+                    if existing:
+                        raise ValueError(f"Duplicate Traded_DP(s) already exist in DB: {', '.join(existing)}")
+
         except Exception as e:
             raise Exception(f"Error inserting batch positions: {e}")
         
@@ -725,43 +747,55 @@ class Database_Class:
             print_and_logging_Function("error", f"Error in fetching ML Dataset: {e}", "title")
             return pd.DataFrame(), pd.DataFrame()
     
-    async def Read_Open_Positions_Function(self) -> list[int]:
+    async def Read_Pending_Positions_Function(self) -> dict[str, int]:
         if self.db_pool is None:
             await self.initialize_db_pool_Function()
 
         try:
             async with self.db_pool.acquire() as conn: # type: ignore
+                await conn.commit()  # Ensure previous state is clean (optional but safe)
                 async with conn.cursor() as cursor:
-                    await cursor.execute(f"""
-                        SELECT Order_ID
-                        FROM {self.Positions_table_name}
-                        WHERE Result = 0
-                    """)
-                    rows = await cursor.fetchall()
+                    try:
+                        await cursor.execute(f"""
+                            SELECT Traded_DP, Order_ID
+                            FROM {self.Positions_table_name}
+                            WHERE Result = 0
+                        """)
+                        rows = await cursor.fetchall()
+                        order_IDs = {row[0]: row[1] for row in rows}
 
-                    # Convert list of tuples to list of integers
-                    order_IDs = [row[0] for row in rows]
-
-                    print_and_logging_Function("info", f"ID Open positions: {order_IDs}", "description")
-                    return order_IDs
+                        print_and_logging_Function("info", f"ID Open positions: {order_IDs.values()}", "description")
+                        return order_IDs
+                    except Exception as e:
+                        raise e
+                    finally:
+                        await cursor.close()
 
         except Exception as e:
             print_and_logging_Function("error", f"Error in fetching open positions: {e}", "title")
-            return []
+            return {}
 
-    async def remove_cancelled_positions_Function(self, cancelled_list: list[int]):
+    async def remove_cancelled_positions_Function(self, cancelled_list_dict: dict[str, int]):
         if self.db_pool is None:
             await self.initialize_db_pool_Function()
         try:
-            self.Traded_DP_Set -= set(cancelled_list)
-            async with self.db_pool.acquire() as conn: # type: ignore
-                async with conn.cursor() as cursor:
-                    if cancelled_list:
-                        # Create a comma-separated string of placeholders (%s, %s, ...)
-                        placeholders = ','.join(['%s'] * len(cancelled_list))
-                        query = f"DELETE FROM {self.Positions_table_name} WHERE Order_ID IN ({placeholders})"
-                        await cursor.execute(query, cancelled_list)
+            for cancelled_id in cancelled_list_dict.keys():
+                self.Traded_DP_Dict.pop(cancelled_id, None)  # Safe removal
+
+            values = list(cancelled_list_dict.values())
+            if values:
+                placeholders = ','.join(['%s'] * len(values))
+                query = f"DELETE FROM {self.Positions_table_name} WHERE Order_ID IN ({placeholders})"
+                async with self.db_pool.acquire() as conn:  # type: ignore
+                    await conn.commit()  # Ensure previous state is clean (optional but safe)
+                    async with conn.cursor() as cursor:
+                        await cursor.execute(query, values)
                         await conn.commit()
-                        print_and_logging_Function("info",f"Removed {cancelled_list} cancelled positions from DB and memory.", "description")
+                        print_and_logging_Function("info", f"Removed {values} cancelled positions from DB and memory.", "description")
         except Exception as e:
             raise Exception(f"Error in removing the cancelled positions from DB: {e}")
+                
+class TradeInfo(typing.TypedDict):
+    TP: float
+    Vol: float
+    Order_ID: int
