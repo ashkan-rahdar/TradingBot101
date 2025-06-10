@@ -13,6 +13,7 @@ from classes.Flag import Flag_Class
 from functions.logger import print_and_logging_Function
 from classes.FlagPoint import FlagPoint_Class
 from classes.DP_Parameteres import DP_Parameteres_Class
+from classes.Metatrader_Module import CMetatrader_Module
 
 class Database_Class:
     """
@@ -666,7 +667,7 @@ class Database_Class:
         traded_dps = [pos[0] for pos in positions]
         placeholders = ', '.join(['%s'] * len(traded_dps))
         check_query = f"""
-            SELECT Traded_DP FROM {self.Positions_table_name}
+            SELECT Traded_DP, Order_ID FROM {self.Positions_table_name}
             WHERE Traded_DP IN ({placeholders})
         """
 
@@ -676,10 +677,10 @@ class Database_Class:
                 async with conn.cursor() as cursor:
                     # Step 2: Check for existing Traded_DP entries
                     await cursor.execute(check_query, traded_dps)
-                    existing = {row[0] for row in await cursor.fetchall()}
-
+                    existing : dict[str, int] = {row[0]: row[1] for row in await cursor.fetchall()}
+                    
                     # Step 3: Filter positions to insert only new ones
-                    new_positions = [pos for pos in positions if pos[0] not in existing]
+                    new_positions = [pos for pos in positions if pos[0] not in existing.keys()]
 
                     # Step 4: Insert only non-duplicate positions
                     if new_positions:
@@ -691,8 +692,10 @@ class Database_Class:
                         await cursor.executemany(insert_query, new_positions)
                         await conn.commit()
 
-                    # Step 5: Raise error if duplicates found
+                    # Step 5: Raise error if duplicates found and cancel duplicated positions !
                     if existing:
+                        for anOrder_ID in existing.values():
+                            CMetatrader_Module.cancel_order(anOrder_ID)
                         raise ValueError(f"Duplicate Traded_DP(s) already exist in DB: {', '.join(existing)}")
 
         except Exception as e:
