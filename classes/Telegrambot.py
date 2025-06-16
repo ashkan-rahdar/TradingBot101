@@ -13,7 +13,7 @@ with open("./TelegramBot_Token.json", "r") as file:
     config = json.load(file)
     
 class Telegrambot_Class():
-    PASSWORD = '09120058456'
+    PASSWORD = config["password"]
     authenticated_users = set()
     last_message_responded = None
     
