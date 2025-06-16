@@ -693,7 +693,14 @@ class Timeframe_Class:
             Result_percent, Result = await self.CMySQL_DataBase.PNL_Calculator_Function()
             winrate = await self.CMySQL_DataBase.winrate_Calculator_Function()
             try:
-                CTelegramBot.send_message(text=f"{self.timeframe} Result -> {Result} => {Result_percent}% \n winrate -> {winrate}")
+                CTelegramBot.send_message(
+                    text=(
+                        f"📊 Performance Report - {self.timeframe} 📊\n\n"
+                        f"Result: {Result} ({Result_percent}%)\n"
+                        f"Win Rate: {winrate:.2%}\n\n"
+                        f"📈 Stay informed and manage risk accordingly."
+                    )
+                )
             except Exception as e:
                 print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
         except Exception as e:
