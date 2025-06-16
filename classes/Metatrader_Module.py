@@ -204,6 +204,10 @@ class Metatrader_Module_Class:
             else:
                 sl_adjusted = sl
 
+            if abs(sl_adjusted - sl) > abs(sl - price):
+                print_and_logging_Function("warning",f"Large commesion for this position is dangerous, Basic SL will be considered for preventing high risk: \n SL based on commesion:{sl_adjusted}, Basic SL: {sl}", "title")
+                sl_adjusted = sl
+                
             request = {
                 "action": self.mt.TRADE_ACTION_DEAL if (order_type_INT is not None and order_type_INT < 2) else self.mt.TRADE_ACTION_PENDING,
                 "symbol": ticker,
