@@ -153,7 +153,7 @@ class Database_Class:
             BEGIN
                 IF NEW.Result <> OLD.Result THEN
                     UPDATE {self.Positions_table_name}
-                    SET Result = NEW.Result
+                    SET Result = NEW.Result * ABS(Price - SL)
                     WHERE Traded_DP = NEW.id AND Result <> NEW.Result;
                 END IF;
             END
