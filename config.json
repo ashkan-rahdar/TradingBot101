@@ -8,13 +8,16 @@
     },
     "trading_configs":{
         "timeframes": ["M1"],
-        "asset": "BTCUSD",
+        "asset": "EURUSD",
 
         "risk_management":{
-            "MIN_Risk" : 0.1,
-            "MIN_Prob": 0.50,
-            "MAX_Risk": 1.0,
-            "Retrain_Every" : 10
+            "MIN_Prob": 0.85,
+            "DD_Monthly" : 0.08,
+            "Max_No_Trade_Daily": 10
+        },
+        "ML_Engine":{
+            "Retrain_Every" : 10,
+            "Min_Test_Dataset_size": 100
         }
     },
     "runtime":{
