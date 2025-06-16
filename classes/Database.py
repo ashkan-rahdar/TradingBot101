@@ -797,7 +797,42 @@ class Database_Class:
                         print_and_logging_Function("info", f"Removed {values} cancelled positions from DB and memory.", "description")
         except Exception as e:
             raise Exception(f"Error in removing the cancelled positions from DB: {e}")
-                
+    
+    async def PNL_Calculator_Function(self) -> tuple[float, float]:
+        if self.db_pool is None:
+            await self.initialize_db_pool_Function()
+
+        try:
+            async with self.db_pool.acquire() as conn:  # type: ignore
+                await conn.commit()
+                async with conn.cursor() as cursor:
+                    await cursor.execute(f"""SELECT SUM(Result * Vol) FROM {self.Positions_table_name}""")
+                    result = await cursor.fetchone()
+                    total_vol_pip = result[0] if result and result[0] is not None else 0.0
+
+            return CMetatrader_Module.profit_calculator_Function(total_vol_pip)
+        except Exception as e:
+            raise Exception(f"Error calculating the PNL of {self.Positions_table_name}: {e}")
+        
+    async def winrate_Calculator_Function(self) -> float:
+        if self.db_pool is None:
+            await self.initialize_db_pool_Function()
+
+        try:
+            async with self.db_pool.acquire() as conn:  # type: ignore
+                await conn.commit()
+                async with conn.cursor() as cursor:
+                    await cursor.execute(f"""
+                        SELECT 
+                            CAST(SUM(CASE WHEN Result > 0 THEN 1 ELSE 0 END) AS FLOAT) / 
+                            NULLIF(COUNT(CASE WHEN Result != 0 THEN 1 END), 0) AS winrate
+                        FROM {self.Positions_table_name}
+                    """)
+                    result = await cursor.fetchone()
+                    return result[0] if result and result[0] is not None else 0.0
+        except Exception as e:
+            raise Exception(f"Error calculating the winrate of {self.Positions_table_name}: {e}")
+        
 class TradeInfo(typing.TypedDict):
     TP: float
     Vol: float

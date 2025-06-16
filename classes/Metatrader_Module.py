@@ -187,7 +187,7 @@ class Metatrader_Module_Class:
             # Get number of decimal places for the asset dynamically
             symbol_info = self.mt.symbol_info(ticker)  # type: ignore
             if symbol_info is None:
-                print(f"Error: Could not retrieve symbol info for {ticker}")
+                print_and_logging_Function("error",f"Error: Could not retrieve symbol info for {ticker}")
                 return None, None
 
             digits = symbol_info.digits
@@ -374,6 +374,32 @@ class Metatrader_Module_Class:
         except Exception as e:
             raise Exception(f"Error in modify TP of {order_id}: {e}")
 
+    def profit_calculator_Function(self, vol_pip: float, ticker: str = config["trading_configs"]["asset"]) -> tuple[float, float]:
+        try:
+            account_info = self.mt.account_info()  # type: ignore
+            if account_info is None:
+                raise ValueError("Failed to fetch account info.")
+
+            symbol_info = self.mt.symbol_info(ticker)  # type: ignore
+            if symbol_info is None:
+                raise ValueError(f"Error: Could not retrieve symbol info for {ticker}")
+
+            balance = float(account_info.balance)
+            tick_size = float(symbol_info.trade_tick_size)
+            tick_value = float(symbol_info.trade_tick_value)
+
+            if tick_size <= 0.0 or tick_value <= 0.0:
+                raise ValueError(f"Invalid tick data for {ticker}: tick_size={tick_size}, tick_value={tick_value}")
+
+            # Calculate raw profit
+            profit = (vol_pip / tick_size) * tick_value
+            profit_percent = profit / balance *100 if balance != 0.0 else 0.0
+
+            return profit_percent, profit
+
+        except Exception as e:
+            raise Exception(f"Error calculating profit for {ticker}: {e}")
+    
     def initialize_mt5_Function(self):
         """
         Asynchronously initializes the MetaTrader5 trading platform.

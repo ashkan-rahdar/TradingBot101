@@ -624,8 +624,16 @@ class Timeframe_Class:
                         new_TP = aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price)
                     else:
                         new_TP = aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price)
+                        
+                    # Looking for TP changes
                     if new_TP < previous_info["TP"]:
                         CMetatrader_Module.modify_pending_order_Function(self.CMySQL_DataBase.Traded_DP_Dict[The_index]["Order_ID"], new_TP) # type: ignore
+                    
+                    # Looking for vol changes 
+                    # ========================================================
+                    # ========================================================
+                    # ========================================================
+                    
                 except Exception as e:
                     print_and_logging_Function("error", e, "title") # type: ignore
         
@@ -679,5 +687,16 @@ class Timeframe_Class:
             await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
         except Exception as e:
             print_and_logging_Function("error", f"Error in canceling positions: {e}")
-              
+    
+    async def Result_Reporter_Function(self):
+        try:
+            Result_percent, Result = await self.CMySQL_DataBase.PNL_Calculator_Function()
+            winrate = await self.CMySQL_DataBase.winrate_Calculator_Function()
+            try:
+                CTelegramBot.send_message(text=f"{self.timeframe} Result -> {Result} => {Result_percent}% \n winrate -> {winrate}")
+            except Exception as e:
+                print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
+        except Exception as e:
+            raise Exception(f"Error in calculating / Notify user PNL: {e}")
+               
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]

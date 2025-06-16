@@ -205,6 +205,13 @@ async def main():
                     print_and_logging_Function("info", f"Closing Postions of {The_timeframe}", "description")
                     await CTimeFrames[The_index].Closing_positions_Function()
 
+                try:
+                    for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
+                        print_and_logging_Function("info", f"Calculating the Result of {The_timeframe}", "description")
+                        await CTimeFrames[The_index].Result_Reporter_Function()
+                except Exception as e:
+                    print_and_logging_Function("error",f"Error in Reporting the Result of timeframes: {e}")
+                    
                 while not is_trading_hours_now():
                     await asyncio.sleep(60)
                     if parameters.shutdown_flag:
