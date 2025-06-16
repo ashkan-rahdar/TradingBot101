@@ -10,7 +10,6 @@ import random
 import typing
 import pickle
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, brier_score_loss
 from catboost import CatBoostClassifier, Pool
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,14 +23,14 @@ from classes.Flag_Detector import FlagDetector_Class
 from classes.Metatrader_Module import CMetatrader_Module
 from functions.logger import print_and_logging_Function
 from functions.run_with_retries import run_with_retries_Function
-from functions.Reaction_detector import main_reaction_detector
 from classes.Database import Database_Class
 from classes.Telegrambot import CTelegramBot
+from classes.Position_Manager import Position_Manager_Class
 
-TARGET_PROB = config["trading_configs"]["risk_management"]["MIN_Prob"]
-MAX_RISK = config["trading_configs"]["risk_management"]["MAX_Risk"]
-MIN_RISK = config["trading_configs"]["risk_management"]["MIN_Risk"]
-RETRAIN_EVERY = config["trading_configs"]["risk_management"]["Retrain_Every"]
+TARGET_PROB: float = config["trading_configs"]["risk_management"]["MIN_Prob"]
+Max_No_Trade_Daily: int = config["trading_configs"]["risk_management"]["Max_No_Trade_Daily"]
+RETRAIN_EVERY: int = config["trading_configs"]["ML_Engine"]["Retrain_Every"]
+MIN_Test_Dataset_size: int = config["trading_configs"]["ML_Engine"]["Min_Test_Dataset_size"]
 
 class Timeframe_Class:
     """
@@ -153,12 +152,6 @@ class Timeframe_Class:
         except RuntimeError as The_error:
             print_and_logging_Function("error", f"{self.timeframe} Flag detection failed: {The_error}", "title")
     
-    async def development(self):
-        try:
-            await run_with_retries_Function(main_reaction_detector, self.DataSet)
-        except RuntimeError as e:
-            print_and_logging_Function("error", f"Reaction detection failed: {e}", "title")
-
     async def validate_DPs_Function(self):
         """
         Asynchronous function to validate and process tradeable data points (DPs) for backtesting and database updates.
@@ -203,7 +196,7 @@ class Timeframe_Class:
                 task = self.Each_DP_validation_Function(The_valid_DP, index_of_DP)
                 tasks.append(task)
             
-            await asyncio.gather(*tasks)  # Await all tasks
+            await asyncio.gather(*tasks, return_exceptions= True)  # Await all tasks
             
             try:
                 await self.CMySQL_DataBase._update_dp_Results_Function(self.inserting_BackTest_DB)
@@ -264,8 +257,8 @@ class Timeframe_Class:
         try:
             # Pre-calculate these values once outside the loop
             time_series = self.DataSet['time'].to_numpy(dtype='datetime64[ns]')
-            high_series = self.DataSet['high'].values
-            low_series = self.DataSet['low'].values
+            high_series = self.DataSet['high'].to_numpy(dtype=float)
+            low_series = self.DataSet['low'].to_numpy(dtype=float)
             
             if aDP is None or aDP.weight == 0:
                 return
@@ -337,7 +330,7 @@ class Timeframe_Class:
     async def ML_Main_Function(self):
         RR_levels = np.arange(1.25, 5.1, 0.25)  # Range of test RRs
         probs = []
-        self.Do_Trade_DpList : list[tuple[DP_Parameteres_Class, typing.Union[str, None], int, int]] = []
+        self.Do_Trade_DpList : list[tuple[DP_Parameteres_Class, typing.Union[str, None], float, float, float]] = []
         X_FTC, Y_FTC = await self.CMySQL_DataBase.Read_ML_table_Function()
         FTC_models, model_weights = self.RR_ML_Training(RR_levels, X_FTC, Y_FTC, "FTC")
         DP_TradeList = await self.CMySQL_DataBase._get_tradeable_DPs_Function(self.Tradeable_DPs)
@@ -355,24 +348,22 @@ class Timeframe_Class:
                 ])
 
             # Enforce monotonicity (with a threshold)
-            if not np.all(probs[:-1] + 0.05 >= probs[1:]):
+            if not np.all(probs[:-1] + 0.1 >= probs[1:]):
                 continue
 
-            reliable_idx = [i for i, p in enumerate(probs) if p >= TARGET_PROB]
+            reliable_idx = [i for i, p in enumerate(probs) if p*model_weights[RR_levels[i]] >= TARGET_PROB]
             if not reliable_idx:
                 continue
 
-            weighted_score = sum(probs[i] * model_weights[RR_levels[i]] for i in reliable_idx)
-            weight_sum = sum(model_weights[RR_levels[i]] for i in reliable_idx)
-            confidence = weighted_score / weight_sum if weight_sum != 0 else 0.0
-
-            if confidence < TARGET_PROB:
-              continue
             best_rr_idx = reliable_idx[-1]
-            if all(probs[i] >= TARGET_PROB for i in range(best_rr_idx + 1)):
-              best_rr = RR_levels[best_rr_idx]
-              trade_risk = ((confidence - TARGET_PROB) / (1.0 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
-              self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), trade_risk, best_rr))
+            
+            if all(probs[i] >= TARGET_PROB * 0.8 for i in range(best_rr_idx + 1)):
+                best_rr : float = RR_levels[best_rr_idx]
+                trade_risk_percent: float = 100 * Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_levels[best_rr_idx]]),
+                                                                                    Estimated_trade_nums_Daily= Max_No_Trade_Daily,
+                                                                                    Trade_RR= best_rr)
+                
+                self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), trade_risk_percent, best_rr, probs[best_rr_idx]*model_weights[RR_levels[best_rr_idx]]))
 
     def RR_ML_Training(self, RR_values: np.ndarray, Input: pd.DataFrame, Output: pd.DataFrame, DP_type: str = "FTC") -> tuple[dict[float, CatBoostClassifier], dict[float, float]]:
         try:
@@ -391,64 +382,92 @@ class Timeframe_Class:
 
             # --- Otherwise, Retrain and Overwrite Cache ---
             self.retrain_counters[DP_type] = 0  # Reset counter
+            
+            # Start new modeling
             X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state = self.RANDOM_STATE)
+            X_train = pd.DataFrame(X_train)
+            X_test = pd.DataFrame(X_test)
+            y_train = pd.DataFrame(y_train)
+            y_test = pd.DataFrame(y_test)
+            
             categorical_features = ["Is_related_DP_used", "Is_golfed", "Is_used_half"]
             
             models: dict[float, CatBoostClassifier] = {}
-            metrics_train = {}
-            metrics_test = {}
+            model_weights : dict[float, float] = {}
+
+            if y_test.shape[0] <= MIN_Test_Dataset_size:
+                print_and_logging_Function("warning",f"Testing Dataset is under valid size: {MIN_Test_Dataset_size}. Using Total Dataset for weighting models...", "title")
+                y_test = Output
+                X_test = Input
             
             for rr in RR_values:
-                print_and_logging_Function("info", f"Training the {rr} model for {DP_type} {self.timeframe}", "title")
-                # Binary label for this RR
-                y_train_bin = (y_train >= rr).astype(int)
-                y_test_bin = (y_test >= rr).astype(int)
+                try:
+                    print_and_logging_Function("info", f"Training the {rr} model for {DP_type} {self.timeframe}", "title")
+                    # Binary label for this RR
+                    y_train_bin : pd.DataFrame = (y_train >= rr).astype(int)
+                    y_test_bin : pd.DataFrame = (y_test >= rr).astype(int)
+                    
+                    # Create CatBoost Pools
+                    train_pool = Pool(data= X_train, label=y_train_bin, cat_features=categorical_features)
+                    
+                    model = CatBoostClassifier(
+                        iterations=1000,
+                        learning_rate=0.01,
+                        depth=6,
+                        loss_function='Logloss',
+                        eval_metric='AUC',
+                        l2_leaf_reg=5,
+                        bootstrap_type='Bayesian',
+                        random_strength=5,
+                        boosting_type='Ordered',
+                        early_stopping_rounds=50,
+                        auto_class_weights='Balanced',
+                        verbose=False,
+                        allow_writing_files=False
+                    )
+                    model.fit(train_pool)
+                    models[rr] = model
+                    
+                    # Custom Metric For Testing the model                
+                    test_pool = Pool(data= X_test, label= y_test_bin, cat_features=categorical_features)
+                    Y_Testing_Prob = model.predict_proba(test_pool)[:, 1]
+                    df = pd.DataFrame({
+                        "predicted_prob": Y_Testing_Prob,
+                        "actual": y_test_bin
+                    })
+                        
+                    df["bucket"] = np.where(df["predicted_prob"] >= TARGET_PROB, "high", "low")
 
-                # Create CatBoost Pools
-                train_pool = Pool(X_train, label=y_train_bin, cat_features=categorical_features)
-                test_pool = Pool(X_test, label=y_test_bin, cat_features=categorical_features)
-                
-                model = CatBoostClassifier(
-                    iterations=1000,
-                    learning_rate=0.01,
-                    depth=6,
-                    loss_function='Logloss',
-                    eval_metric='AUC',
-                    l2_leaf_reg=5,
-                    bootstrap_type='Bayesian',
-                    random_strength=5,
-                    boosting_type='Ordered',
-                    early_stopping_rounds=50,
-                    auto_class_weights='Balanced',  # Or use scale_pos_weight manually
-                    verbose=False,
-                    allow_writing_files=False
-                )
-                model.fit(train_pool)
-                
-                # Metrics
-                y_train_prob = model.predict_proba(train_pool)[:, 1]
-                y_test_prob = model.predict_proba(test_pool)[:, 1]
+                    # Check if any high-probability samples exist
+                    if (df["bucket"] == "high").sum() == 0:
+                        print_and_logging_Function("warning",f"RR {rr} Timeframe {self.timeframe} -> \n No predictions with prob >= {TARGET_PROB}. \n Model is too conservative or threshold too high.Won't be considered as a valid model","title")
+                        model_weights[rr] = 0.0
+                        continue
 
-                auc_train = roc_auc_score(y_train_bin, y_train_prob)
-                brier_train = brier_score_loss(y_train_bin, y_train_prob)
+                    # Group and calculate metrics
+                    bucket_summary = df.groupby("bucket").agg({
+                        "predicted_prob": "mean",
+                        "actual": "mean"
+                    }).rename(columns={"actual": "empirical_winrate"})
 
-                auc_test = roc_auc_score(y_test_bin, y_test_prob)
-                brier_test = brier_score_loss(y_test_bin, y_test_prob)
+                    # Check high-prob group
+                    high = bucket_summary.loc["high"]
+                    if high["empirical_winrate"].item() < high["predicted_prob"].item() - 0.2:
+                        print_and_logging_Function("warning",f"RR {rr} Timeframe {self.timeframe} -> \n High-prob group underperforms: empirical winrate {high['empirical_winrate']:.2f} is more than 0.2 less than predicted {high['predicted_prob']:.2f}.\n Won't be considered as a valid model", "title")
+                        model_weights[rr] = 0.0
+                        continue
 
-                models[rr] = model
-                metrics_train[rr] = {"AUC": auc_train, "Brier": brier_train}
-                metrics_test[rr] = {"AUC": auc_test, "Brier": brier_test}
-                
-            # Print results
-            print_and_logging_Function("info", "Training Metrics per RR Level:", "title")
-            for rr, score in metrics_train.items():
-                print_and_logging_Function("info", f"RR {rr:.2f} — Train AUC: {score['AUC']:.3f}, Train Brier: {score['Brier']:.3f}", "description")
-
-            print_and_logging_Function("info", "Testing Metrics per RR Level:", "title")
-            for rr, score in metrics_test.items():
-                print_and_logging_Function("info", f"RR {rr:.2f} — Test AUC: {score['AUC']:.3f}, Test Brier: {score['Brier']:.3f}", "description")
-                
-            model_weights: dict[float, float] = {rr: (metrics_test[rr]["AUC"]**2) * (1 - metrics_test[rr]["Brier"]) for rr in RR_values}
+                    # Check low-prob group if exists
+                    if "low" in bucket_summary.index:
+                        low = bucket_summary.loc["low"]
+                        if low["empirical_winrate"].item() > 0.5:
+                            print_and_logging_Function("warning",f"RR {rr} Timeframe {self.timeframe} -> \n Low-prob group too strong: empirical winrate is {low['empirical_winrate']:.2f} (> 0.5), check model discrimination. \n Won't be considered as a valid model", "title")
+                            model_weights[rr] = 0.0
+                            continue
+                    model_weights[rr] = (high["empirical_winrate"].item() / high["predicted_prob"].item())
+                except Exception as e:
+                    raise Exception(f"Error-> ML engine -> training the ML model -> RR {rr} : {e}")
+                        
             # Backtest filtering logic on test dataset
             result_on_test = 0
             succeeded_trades = 0
@@ -462,29 +481,29 @@ class Timeframe_Class:
                 probs = np.array(probs)
 
                 # Enforce monotonicity (with a threshold)
-                if not np.all(probs[:-1] + 0.05 >= probs[1:]):
+                if not np.all(probs[:-1] + 0.1 >= probs[1:]):
                     continue
 
-                reliable_idx = [i for i, p in enumerate(probs) if p >= TARGET_PROB]
+                reliable_idx = [i for i, p in enumerate(probs) if p*model_weights[RR_values[i]] >= TARGET_PROB]
                 if not reliable_idx:
                     continue
 
-                weighted_score = sum(probs[i] * model_weights[RR_values[i]] for i in reliable_idx)
-                weight_sum = sum(model_weights[RR_values[i]] for i in reliable_idx)
-                confidence = weighted_score / weight_sum if weight_sum != 0 else 0
-
-                if confidence >= TARGET_PROB:
-                    best_rr_idx = reliable_idx[-1]
-                    best_rr = RR_values[best_rr_idx]
+                best_rr_idx = reliable_idx[-1]
+                if all(probs[i] >= TARGET_PROB * 0.8 for i in range(best_rr_idx + 1)):
+                    best_rr : float = RR_values[best_rr_idx]
                     if all(probs[i] >= TARGET_PROB for i in range(best_rr_idx + 1)):
                         if y_test.iloc[i].item() >= best_rr:
-                            result_on_test += ((confidence - TARGET_PROB) / (1 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) * best_rr + MIN_RISK * best_rr
+                            result_on_test += Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_values[best_rr_idx]]),
+                                                                                        Estimated_trade_nums_Daily= Max_No_Trade_Daily,
+                                                                                        Trade_RR= best_rr) * best_rr
                             succeeded_trades += 1
                         else:
-                            result_on_test -= ((confidence - TARGET_PROB) / (1 - TARGET_PROB)) * (MAX_RISK - MIN_RISK) + MIN_RISK
+                            result_on_test -= Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_values[best_rr_idx]]),
+                                                                                        Estimated_trade_nums_Daily= Max_No_Trade_Daily,
+                                                                                        Trade_RR= best_rr)
                         total_trades += 1
             winrate = succeeded_trades / total_trades if total_trades > 0 else 0
-            print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test} percent profit with the {winrate} winrate in {total_trades} trades", "title")
+            print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test * 100} percent profit with the {winrate} winrate in {total_trades} trades", "title")
             if winrate <= (TARGET_PROB**2) and result_on_test <= 0 :
                 models = {float("nan"): CatBoostClassifier()} 
                 self.RANDOM_STATE = random.randint(10, 50)
@@ -494,8 +513,8 @@ class Timeframe_Class:
             with open(model_cache_path, "wb") as f:
                 pickle.dump((models, model_weights), f)
             return models, model_weights
-        except RuntimeError as The_error:
-            print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{The_error}", "title")
+        except Exception as e:
+            print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{e}", "title")
             return {float("nan"): CatBoostClassifier()} , {}
     
     async def Update_Positions_Function(self):
@@ -540,59 +559,17 @@ class Timeframe_Class:
         - The function assumes that `self.Tradeable_DPs` is a list of tuples containing tradeable decision points 
           and their indices.
         """
-        
-        def calculate_trade_volume(entry_price: float, stop_loss_price: float, risk_percent: float) -> float:
-            symbol = config["trading_configs"]["asset"]
-            account_info = CMetatrader_Module.mt.account_info() # type: ignore
-            if account_info is None:
-                raise Exception("Failed to fetch account info.")
-
-            balance = account_info.balance
-            risk_amount = (risk_percent / 100) * balance
-
-            symbol_info = CMetatrader_Module.mt.symbol_info(symbol) # type: ignore
-            if symbol_info is None:
-                raise Exception(f"Symbol {symbol} not found.")
-
-            tick_size = symbol_info.trade_tick_size
-            tick_value = symbol_info.trade_tick_value
-            volume_min = symbol_info.volume_min
-            volume_max = symbol_info.volume_max
-            volume_step = symbol_info.volume_step
-
-            if tick_size == 0 or tick_value == 0:
-                raise Exception(f"Invalid tick size or tick value for {symbol}.")
-
-            # === Calculate loss per lot dynamically ===
-            sl_distance_in_price = abs(entry_price - stop_loss_price)
-            if sl_distance_in_price == 0:
-                raise Exception("Stop Loss distance cannot be zero.")
-
-            # loss for 1 lot
-            loss_per_lot = (sl_distance_in_price / tick_size) * tick_value
-
-            if loss_per_lot == 0:
-                raise Exception("Loss per lot is zero, cannot divide.")
-
-            # === Calculate the volume ===
-            volume = risk_amount / loss_per_lot
-
-            # === Round properly ===
-            volume = max(volume_min, min(volume_max, round(volume / volume_step) * volume_step))
-            return volume
-        
         new_opened_positions = 0
         inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, int, float]] = []
 
-        for aDP, The_index, Estimated_Risk, Estimated_RR in self.Do_Trade_DpList:
+        for aDP, The_index, Estimated_Risk, Estimated_RR, probability in self.Do_Trade_DpList:
             # Trade new detected DPs
             if The_index not in self.CMySQL_DataBase.Traded_DP_Dict.keys():
                 try:
-                    probability = ((Estimated_Risk - MIN_RISK) / (MAX_RISK - MIN_RISK)) * (1.0 - TARGET_PROB) + TARGET_PROB
                     if aDP.trade_direction == "Bullish":    
                         result = CMetatrader_Module.Open_position_Function(
                             order_type=     "Buy Limit",
-                            vol=            calculate_trade_volume(aDP.High.price, aDP.Low.price, Estimated_Risk),
+                            vol=            Position_Manager_Class.Vol_Calculator_RiskBased_Function(aDP.High.price, aDP.Low.price, Estimated_Risk, config["trading_configs"]["asset"]),
                             price=          aDP.High.price,
                             sl=             aDP.Low.price,
                             tp=             aDP.High.price + Estimated_RR * (aDP.High.price - aDP.Low.price),
@@ -602,7 +579,7 @@ class Timeframe_Class:
                     else:
                         result = CMetatrader_Module.Open_position_Function(
                             order_type=     "Sell Limit",
-                            vol=            calculate_trade_volume(aDP.Low.price, aDP.High.price, Estimated_Risk),
+                            vol=            Position_Manager_Class.Vol_Calculator_RiskBased_Function(aDP.High.price, aDP.Low.price, Estimated_Risk, config["trading_configs"]["asset"]),
                             price=          aDP.Low.price,
                             sl=             aDP.High.price,
                             tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
@@ -663,7 +640,7 @@ class Timeframe_Class:
         # Cancel positions which are not valid anymore
         try:
             Pending_position_IDs = await self.CMySQL_DataBase.Read_Pending_Positions_Function()  # noqa: F841
-            valid_trade_indices = {The_index for _, The_index, _, _ in self.Do_Trade_DpList}  # noqa: F841
+            valid_trade_indices = {The_index for _, The_index, _, _,_ in self.Do_Trade_DpList}  # noqa: F841
             cancelled_positions_IDs : dict[str, int] = {}
             
             for The_index, order_ID in Pending_position_IDs.items():
