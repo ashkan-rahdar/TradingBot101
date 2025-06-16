@@ -121,5 +121,4 @@ class Position_Manager_Class:
         # Scale Kelly fraction to prevent over-risking
         kelly_fraction_risk = max(0.0, min(Kelly_Scale * kelly_fraction, Max_Kelly_Risk))
         
-        print(f"Kelly: {kelly_fraction_risk}, Losing streak: {Losing_streak_risk}")
         return min(kelly_fraction_risk, Losing_streak_risk)
