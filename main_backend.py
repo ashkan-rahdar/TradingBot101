@@ -190,8 +190,9 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
 
         profiler.disable()
         elapsed = time.time() - start_time
-        print_and_logging_Function("info",f"For Each loop of Each timeframe: {elapsed:.2f} seconds", "title")
-        # profiler.print_stats(sort='cumtime')
+        if config['runtime']['develop_mode'] :
+            print_and_logging_Function("info",f"For Each loop of Each timeframe: {elapsed:.2f} seconds", "title")
+            # profiler.print_stats(sort='cumtime')
         
         # preventing spam requests
         await asyncio.sleep(60)
