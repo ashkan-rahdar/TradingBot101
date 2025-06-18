@@ -35,21 +35,23 @@ class Telegrambot_Class():
         payload = {'chat_id': chat_id, 'text': text}
         requests.post(f'{self.API_URL}/sendMessage', json=payload)
         
-    def notify_placed_position(self, direction: typing.Literal["Buy Limit", "Sell Limit"], price: int, sl: int, tp: int, vol: int, chance: int,  chat_id: str = config['chat_id']):
+    def notify_placed_position(self, direction: typing.Literal["Buy Limit", "Sell Limit"], price: int, sl: int, tp: int, vol: int, chance: int, order_Id: int, chat_id: str = config['chat_id']):
         text = (
             "*`{}` Position Placed*\n"
             " `{}` % chance \n\n"
             "*Price:*   `{}`\n"
             "*SL:*   `{}`\n"
             "*TP:*   `{}`\n"
-            "*Volume:*   `{}`"
+            "*Volume:*   `{}`\n"
+            "*Order ID:*   `{}`"
         ).format(
             "🟢" + direction if direction == "Buy Limit" else "🔴" + direction,
             chance,
             self.escape_md(str(price)),
             self.escape_md(str(sl)),
             self.escape_md(str(tp)),
-            self.escape_md(str(vol))
+            self.escape_md(str(vol)),
+            self.escape_md(str(order_Id))
         )
 
         payload = {
@@ -137,7 +139,6 @@ class Telegrambot_Class():
 
         else:
             self.send_message(chat_id, '❓ Unknown command. Use /help to see available options.')
-
             
     def escape_md(self, text: str) -> str:
         escape_chars = r"_*[]()~`>#+-=|{}.!"

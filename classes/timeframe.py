@@ -585,7 +585,14 @@ class Timeframe_Class:
                             tp=             aDP.Low.price - Estimated_RR * (aDP.High.price - aDP.Low.price),
                             comment =       f"{int(probability * 100)}% chance, {self.timeframe}",
                         )
-                    if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
+                    if result is None:
+                        continue
+                    # Not a valid trade (Not MT5 error!)
+                    # ========================================================
+                    # ========================================================
+                    # ========================================================
+                    
+                    elif result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
                         print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                     else:
                         if not config["runtime"]["Able_to_Open_positions"]:
@@ -610,7 +617,7 @@ class Timeframe_Class:
                         print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
                         self.CMySQL_DataBase.Traded_DP_Dict[The_index] = {"TP": result.request.tp, "Vol": result.request.volume, "Order_ID": result.order} # type: ignore
                         try:
-                            CTelegramBot.notify_placed_position(order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100)) # type: ignore
+                            CTelegramBot.notify_placed_position(order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100), result.order) # type: ignore
                         except Exception as e:
                             print_and_logging_Function("error", f"{e}", "title")
 
@@ -627,8 +634,24 @@ class Timeframe_Class:
                         
                     # Looking for TP changes
                     if new_TP < previous_info["TP"]:
-                        CMetatrader_Module.modify_pending_order_Function(self.CMySQL_DataBase.Traded_DP_Dict[The_index]["Order_ID"], new_TP) # type: ignore
-                    
+                        result = CMetatrader_Module.modify_pending_order_Function(self.CMySQL_DataBase.Traded_DP_Dict[The_index]["Order_ID"], new_TP) # type: ignore
+                        if result is None:
+                            continue
+                            # An error happened (Not Mt5 error, should alert user later)
+                            # ========================================================
+                            # ========================================================
+                            # ========================================================
+                        elif result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE:
+                            continue
+                            # An error happened (Mt5 error, should alert user later)
+                            # ========================================================
+                            # ========================================================
+                            # ========================================================
+                        else:
+                            CTelegramBot.send_message(
+                                text=f"✏️ Take-Profit Updated\n\nOrder ID: {self.CMySQL_DataBase.Traded_DP_Dict[The_index]['Order_ID']}\nPrevious TP: {previous_info['TP']}\nNew TP: {result.request.tp}\n\nThis adjustment was made based on updated system logic."  # type: ignore
+                            )
+
                     # Looking for vol changes 
                     # ========================================================
                     # ========================================================
@@ -659,7 +682,10 @@ class Timeframe_Class:
                     else:
                         print_and_logging_Function("info", f"Cancelled order {order_ID}. No more valid position", "description")
                         cancelled_positions_IDs[The_index] = order_ID
-                        
+                        CTelegramBot.send_message(
+                            text=f"🚫 Order Cancelled\n\nOrder ID: {order_ID}\nReason: The setup is no longer valid based on current market conditions.\n\nTrade opportunity has been dismissed to ensure risk protection."
+                        )
+                 
             
             await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
         except Exception as e:
