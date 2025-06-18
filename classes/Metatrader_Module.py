@@ -188,7 +188,7 @@ class Metatrader_Module_Class:
             symbol_info = self.mt.symbol_info(ticker)  # type: ignore
             if symbol_info is None:
                 print_and_logging_Function("error",f"Error: Could not retrieve symbol info for {ticker}")
-                return None, None
+                return None
 
             digits = symbol_info.digits
             tick_size = symbol_info.trade_tick_size
@@ -208,6 +208,14 @@ class Metatrader_Module_Class:
                 print_and_logging_Function("warning",f"Large commesion for this position is dangerous, Basic SL will be considered for preventing high risk: \n SL based on commesion:{sl_adjusted}, Basic SL: {sl}", "title")
                 sl_adjusted = sl
                 
+            # Determine pip size based on digits
+            min_sl_distance = 10 * (10 ** -digits)
+            if abs(price - sl) < min_sl_distance:
+                print_and_logging_Function("warning",
+                    f"SL too close: must be at least 10 pips ({min_sl_distance:.5f}). Trade skipped.",
+                    "title")
+                return None
+
             request = {
                 "action": self.mt.TRADE_ACTION_DEAL if (order_type_INT is not None and order_type_INT < 2) else self.mt.TRADE_ACTION_PENDING,
                 "symbol": ticker,
@@ -351,7 +359,7 @@ class Metatrader_Module_Class:
                 vol = order.volume_initial
                 sl = order.sl
             else: 
-                return
+                return None
 
             request = {
                 "action": self.mt.TRADE_ACTION_MODIFY,
@@ -371,6 +379,8 @@ class Metatrader_Module_Class:
                 raise Exception(f"Failed to modify order {order_id}: Retcode={result.retcode}")
 
             print_and_logging_Function("info", f"Successfully modified order {order_id}: TP={tp}, Vol={vol}", "title")
+            return result
+        
         except Exception as e:
             raise Exception(f"Error in modify TP of {order_id}: {e}")
 
