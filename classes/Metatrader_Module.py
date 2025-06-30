@@ -135,8 +135,12 @@ class Metatrader_Module_Class:
             "Sell Limit": self.mt.ORDER_TYPE_SELL_LIMIT
         }
         self.reverse_order_type_mapping = {value: key for key, value in self.order_type_mapping.items()}
-        self.initialize_mt5_Function()
-        self.login_mt5_Function()
+        
+        try:
+            self.initialize_mt5_Function()
+            self.login_mt5_Function()
+        except Exception as e:
+            print_and_logging_Function("error",f"An error happened in Metatrader: {e} \n possible reasons: \n 1- Network connection \n 2- Account expiration or login")
 
     def Open_position_Function(self, 
                             order_type: typing.Literal["Buy", "Sell", "Buy Limit", "Sell Limit"], 
