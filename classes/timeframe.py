@@ -691,10 +691,22 @@ class Timeframe_Class:
         except Exception as e:
             print_and_logging_Function("error", f"Error in canceling invalid positions: {e}", "title")    
       
-    async def Closing_positions_Function(self):
+    async def Closing_positions_Function(self, is_forced: bool = False):
         # Alert users in Telegram
         try:
-            CTelegramBot.send_message(text="⚠️Attention: Closing Positions⚠️\n\nDue to system conditions, please close all Pending positions immediately to avoid potential risk. Please wait for further notice.")
+            if is_forced:
+                CTelegramBot.send_message(text=
+                                        "⚠️Attention: Closing Positions⚠️\n\n"
+                                        "Due to system conditions, please close all Pending positions immediately to avoid potential risk." 
+                                        "Please wait for further notice.")
+            else:
+                CTelegramBot.send_message(text=
+                                        "🔒 Session Closure Notice\n\n"
+                                        "All open positions are being closed as the trading session has ended. "
+                                        "This action is taken as a precautionary risk management measure to prevent exposure during non-trading hours.\n\n"
+                                        "📉 Please refrain from opening new positions until the next valid trading session begins. "
+                                        "You will be notified when trading resumes.")
+                
         except Exception as e:
             print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
         
@@ -723,7 +735,7 @@ class Timeframe_Class:
                 CTelegramBot.send_message(
                     text=(
                         f"📊 Performance Report - {self.timeframe} 📊\n\n"
-                        f"Result: {Result} ({Result_percent}%)\n"
+                        f"Result: {Result}$ ({Result_percent}%)\n"
                         f"Win Rate: {winrate:.2%}  out of {trade_counts} trades\n\n"
                         f"📈 Stay informed and manage risk accordingly."
                     )

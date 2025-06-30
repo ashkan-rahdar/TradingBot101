@@ -19,6 +19,7 @@ from functions.run_with_retries import run_with_retries_Function  # noqa: E402
 from classes.timeframe import CTimeFrames  # noqa: E402
 from classes.Metatrader_Module import CMetatrader_Module  # noqa: E402
 from functions.utilities import is_trading_hours_now, TelegramBot_loop_Funciton  # noqa: E402
+from classes.Telegrambot import CTelegramBot  # noqa: E402
 import parameters  # noqa: E402
 
 # Load JSON config file
@@ -221,7 +222,17 @@ async def main():
                     if parameters.shutdown_flag:
                         break
                 
-                print_and_logging_Function("info", "Inside trading hours. Starting Bot again...", "title")
+                if not parameters.shutdown_flag:
+                    print_and_logging_Function("info", "Inside trading hours. Starting Bot again...", "title")
+                    CTelegramBot.send_message(
+                        text=(
+                            "🔓 Trading Session Resumed\n\n"
+                            "The trading bot has restarted, and the market is now within valid trading hours. "
+                            "Automated trading operations have resumed as scheduled.\n\n"
+                            "📈 You may now monitor or adjust your positions as needed."
+                        )
+                    )
+
                 continue
             
             if parameters.shutdown_flag:
@@ -247,7 +258,7 @@ async def main():
 
         for The_index, The_timeframe in enumerate(config["trading_configs"]["timeframes"]):
             print_and_logging_Function("info", f"Closing Postions of {The_timeframe}", "description")
-            await CTimeFrames[The_index].Closing_positions_Function()
+            await CTimeFrames[The_index].Closing_positions_Function(is_forced=True)
         sys.exit(1)
 
 if __name__ == "__main__":
