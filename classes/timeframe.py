@@ -718,13 +718,13 @@ class Timeframe_Class:
         try:
             await self.CMySQL_DataBase.correct_position_results_Function()
             Result_percent, Result = await self.CMySQL_DataBase.PNL_Calculator_Function()
-            winrate = await self.CMySQL_DataBase.winrate_Calculator_Function()
+            winrate, trade_counts = await self.CMySQL_DataBase.winrate_Calculator_Function()
             try:
                 CTelegramBot.send_message(
                     text=(
                         f"📊 Performance Report - {self.timeframe} 📊\n\n"
                         f"Result: {Result} ({Result_percent}%)\n"
-                        f"Win Rate: {winrate:.2%}\n\n"
+                        f"Win Rate: {winrate:.2%}  out of {trade_counts} trades\n\n"
                         f"📈 Stay informed and manage risk accordingly."
                     )
                 )

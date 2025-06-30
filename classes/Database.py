@@ -858,7 +858,7 @@ class Database_Class:
                     await conn.commit()
 
         except Exception as e:
-            print_and_logging_Function("error", f"Error correcting Results in Positions table: {e}", "title")
+            raise Exception(f"Error correcting Results in Positions table: {e}")
   
     async def PNL_Calculator_Function(self) -> tuple[float, float]:
         try:
@@ -873,7 +873,7 @@ class Database_Class:
         except Exception as e:
             raise Exception(f"Error calculating the PNL of {self.Positions_table_name}: {e}")
         
-    async def winrate_Calculator_Function(self) -> float:
+    async def winrate_Calculator_Function(self) -> tuple[float, int]:
         if self.db_pool is None:
             await self.initialize_db_pool_Function()
 
@@ -884,11 +884,14 @@ class Database_Class:
                     await cursor.execute(f"""
                         SELECT 
                             CAST(SUM(CASE WHEN Result > 0 THEN 1 ELSE 0 END) AS FLOAT) / 
-                            NULLIF(COUNT(CASE WHEN Result != 0 THEN 1 END), 0) AS winrate
+                            NULLIF(COUNT(CASE WHEN Result != 0 THEN 1 END), 0) AS winrate,
+                            COUNT(CASE WHEN Result != 0 THEN 1 END) AS trade_count
                         FROM {self.Positions_table_name}
                     """)
                     result = await cursor.fetchone()
-                    return result[0] if result and result[0] is not None else 0.0
+                    winrate = result[0] if result and result[0] is not None else 0.0
+                    trade_count = result[1] if result and result[1] is not None else 0
+                    return winrate, trade_count
         except Exception as e:
             raise Exception(f"Error calculating the winrate of {self.Positions_table_name}: {e}")
         
