@@ -798,10 +798,69 @@ class Database_Class:
         except Exception as e:
             raise Exception(f"Error in removing the cancelled positions from DB: {e}")
     
-    async def PNL_Calculator_Function(self) -> tuple[float, float]:
+    async def correct_position_results_Function(self):
         if self.db_pool is None:
             await self.initialize_db_pool_Function()
+            
+        try:
+            async with self.db_pool.acquire() as conn:  # type: ignore
+                await conn.commit()
+                async with conn.cursor() as cursor:
 
+                    # Step 1: Read all necessary fields from Positions table
+                    await cursor.execute(f"""
+                        SELECT id, Traded_DP, Price, TP, SL, Result
+                        FROM {self.Positions_table_name}
+                    """)
+                    positions = await cursor.fetchall()
+                    if not positions:
+                        return
+
+                    # Step 2: Build a list of Traded_DP ids to query their weights
+                    traded_dp_ids = list(set(row[1] for row in positions if row[1]))
+                    await cursor.execute(f"""
+                        SELECT id, weight
+                        FROM {self.important_dps_table_name}
+                        WHERE id IN ({','.join(['%s'] * len(traded_dp_ids))})
+                    """, traded_dp_ids)
+                    dp_weights_raw = await cursor.fetchall()
+                    dp_weights = {row[0]: row[1] for row in dp_weights_raw}
+
+                    # Step 3: Prepare update list
+                    updates = []
+                    for pos in positions:
+                        pos_id, traded_dp, price, tp, sl, result = pos
+                        
+                        if result == 0:
+                            continue  # Skip positions without a result yet
+
+                        hit_tp = abs(tp - price)
+                        hit_sl = abs(sl - price)
+
+                        if result >= hit_tp:
+                            corrected_result = hit_tp
+                        elif dp_weights.get(traded_dp, 0) == 0:
+                            corrected_result = -hit_sl
+                        else:
+                            continue  # The trade hasn't hit TP or SL, leave result unchanged
+
+                        if corrected_result != result:
+                            updates.append((corrected_result, pos_id))
+
+                    # Step 4: Batch update the corrected Results
+                    for new_result, pos_id in updates:
+                        await cursor.execute(f"""
+                            UPDATE {self.Positions_table_name}
+                            SET Result = %s
+                            WHERE id = %s
+                        """, (new_result, pos_id))
+
+                    await conn.commit()
+
+        except Exception as e:
+            print_and_logging_Function("error", f"Error correcting Results in Positions table: {e}", "title")
+  
+    async def PNL_Calculator_Function(self) -> tuple[float, float]:
         try:
             async with self.db_pool.acquire() as conn:  # type: ignore
                 await conn.commit()

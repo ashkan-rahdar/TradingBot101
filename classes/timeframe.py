@@ -716,6 +716,7 @@ class Timeframe_Class:
     
     async def Result_Reporter_Function(self):
         try:
+            await self.CMySQL_DataBase.correct_position_results_Function()
             Result_percent, Result = await self.CMySQL_DataBase.PNL_Calculator_Function()
             winrate = await self.CMySQL_DataBase.winrate_Calculator_Function()
             try:
