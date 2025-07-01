@@ -29,15 +29,15 @@ class Telegrambot_Class():
         params = {'timeout': 10, 'offset': self.last_message_responded}
         try:
             response = requests.get(f'{self.API_URL}/getUpdates', params=params)
-            response.raise_for_status()  # Raises HTTPError for bad HTTP status (e.g., 500)
+            # response.raise_for_status()  # Raises HTTPError for bad HTTP status (e.g., 500)
             result = response.json()
 
             if result['ok']:
                 for update in result['result']:
                     self.last_message_responded = update['update_id'] + 1
                     self.handle_message(update)
-        except RequestException as e:
-            print(Fore.YELLOW + f"[TelegramBot warning]-> Network error while getting new messages from Telegram: {e}." + Style.RESET_ALL)
+        # except RequestException as e:
+            # print(Fore.YELLOW + f"[TelegramBot warning]-> Network error while getting new messages from Telegram: {e}." + Style.RESET_ALL)
         except Exception as e:
             raise e
                 
