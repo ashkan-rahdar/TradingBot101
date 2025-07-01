@@ -266,7 +266,6 @@ class Timeframe_Class:
             index = bisect.bisect_right(time_series, np.datetime64(aDP.first_valid_trade_time))
             
             if index >= len(time_series):
-                # raise Exception(f"No Valid Time entered in a {The_index_DP} DP")
                 self.Tradeable_DPs.append(The_index_DP)
                 return
             
@@ -281,7 +280,7 @@ class Timeframe_Class:
 
                     sl_hits = np.flatnonzero(highs >= aDP.High.price)
                     sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
-                    if sl_idx:
+                    if sl_idx is not None:
                         lows = low_series[entry_idx:sl_idx]
                         self.dps_to_update.append((The_index_DP, 0))
                        
@@ -289,7 +288,7 @@ class Timeframe_Class:
                     if lows.size == 0:
                         max_rr = -1
                     else:
-                        max_rr = (aDP.High.price - lows.min()) / (aDP.High.price - aDP.Low.price)
+                        max_rr = (aDP.Low.price - lows.min()) / (aDP.High.price - aDP.Low.price)
 
                     self.inserting_BackTest_DB.append((
                         The_index_DP,
@@ -308,7 +307,7 @@ class Timeframe_Class:
                     
                     sl_hits = np.flatnonzero(lows <= aDP.Low.price)
                     sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
-                    if sl_idx:
+                    if sl_idx is not None:
                         highs = high_series[entry_idx:sl_idx]
                         self.dps_to_update.append((The_index_DP, 0))
                     
