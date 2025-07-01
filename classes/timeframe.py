@@ -281,7 +281,7 @@ class Timeframe_Class:
                     sl_hits = np.flatnonzero(highs >= aDP.High.price)
                     sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
                     if sl_idx is not None:
-                        lows = low_series[entry_idx:sl_idx]
+                        lows = low_series[entry_idx + 1:sl_idx]
                         self.dps_to_update.append((The_index_DP, 0))
                        
 
@@ -308,7 +308,7 @@ class Timeframe_Class:
                     sl_hits = np.flatnonzero(lows <= aDP.Low.price)
                     sl_idx = entry_idx + sl_hits[0] if sl_hits.size > 0 else None
                     if sl_idx is not None:
-                        highs = high_series[entry_idx:sl_idx]
+                        highs = high_series[entry_idx + 1:sl_idx]
                         self.dps_to_update.append((The_index_DP, 0))
                     
                     if highs.size == 0:
