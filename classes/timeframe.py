@@ -560,9 +560,13 @@ class Timeframe_Class:
         """
         new_opened_positions = 0
         inserting_positions_DB: list[tuple[str, str, float, float, float, datetime.datetime, int, int, int, float]] = []
+        modifying_TP_DB: list[tuple[int, float]] = []
 
         for aDP, The_index, Estimated_Risk, Estimated_RR, probability in self.Do_Trade_DpList:
             # Trade new detected DPs
+            if The_index is None:
+                continue
+            
             if The_index not in self.CMySQL_DataBase.Traded_DP_Dict.keys():
                 try:
                     if aDP.trade_direction == "Bullish":    
@@ -601,7 +605,7 @@ class Timeframe_Class:
 
                         inserting_positions_DB.append((
                             The_index,                # traded_dp_id
-                            order_type,               # order_type
+                            str(order_type),               # order_type
                             result.request.price,     # price # type: ignore
                             result.request.sl,        # sl # type: ignore
                             result.request.tp,        # tp # type: ignore
@@ -650,6 +654,8 @@ class Timeframe_Class:
                             CTelegramBot.send_message(
                                 text=f"✏️ Take-Profit Updated\n\nOrder ID: {self.CMySQL_DataBase.Traded_DP_Dict[The_index]['Order_ID']}\nPrevious TP: {previous_info['TP']}\nNew TP: {result.request.tp}\n\nThis adjustment was made based on updated system logic."  # type: ignore
                             )
+                            self.CMySQL_DataBase.Traded_DP_Dict[str(The_index)]["TP"] = float(result.request.tp)
+                            modifying_TP_DB.append((self.CMySQL_DataBase.Traded_DP_Dict[The_index]['Order_ID'], float(result.request.tp)))
 
                     # Looking for vol changes 
                     # ========================================================
@@ -667,6 +673,13 @@ class Timeframe_Class:
         except Exception as e:
             print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
             
+            
+        # Update The modified positions in DB
+        try:
+            await self.CMySQL_DataBase.update_position_TPs_batch_Function(modifying_TP_DB)
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in Updating The modified positions in DB: {e}", "title")
+        
         # Cancel positions which are not valid anymore
         try:
             Pending_position_IDs = await self.CMySQL_DataBase.Read_Pending_Positions_Function()  # noqa: F841

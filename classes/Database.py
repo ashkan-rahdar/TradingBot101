@@ -895,6 +895,35 @@ class Database_Class:
         except Exception as e:
             raise Exception(f"Error calculating the winrate of {self.Positions_table_name}: {e}")
         
+    async def update_position_TPs_batch_Function(self, modifying_TP_DB: list[tuple[int, float]]) -> None:
+        """
+        Batch update TP values in the Positions table using (Traded_DP, New TP) pairs.
+
+        Args:
+            modifying_TP_DB: List of tuples where each tuple is (Traded_DP, new_TP)
+        """
+        if not modifying_TP_DB:
+            return  # Nothing to update
+
+        if self.db_pool is None:
+            await self.initialize_db_pool_Function()
+
+        try:
+            async with self.db_pool.acquire() as conn:  # type: ignore
+                await conn.commit()
+                async with conn.cursor() as cursor:
+                    await cursor.executemany(
+                        f"""
+                        UPDATE {self.Positions_table_name}
+                        SET TP = %s
+                        WHERE Order_ID = %s
+                        """,
+                        [(tp, order_id) for order_id, tp in modifying_TP_DB]
+                    )
+                    await conn.commit()
+        except Exception as e:
+            raise Exception(f"Error updating TP values in batch: {e}")
+
 class TradeInfo(typing.TypedDict):
     TP: float
     Vol: float
