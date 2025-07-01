@@ -767,7 +767,7 @@ class Database_Class:
                         rows = await cursor.fetchall()
                         order_IDs = {row[0]: row[1] for row in rows}
 
-                        print_and_logging_Function("info", f"ID Open positions: {order_IDs.values()}", "description")
+                        # print_and_logging_Function("info", f"ID Open positions: {order_IDs.values()}", "description")
                         return order_IDs
                     except Exception as e:
                         raise e
