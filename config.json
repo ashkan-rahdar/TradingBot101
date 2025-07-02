@@ -7,11 +7,11 @@
         "spread": 0
     },
     "trading_configs":{
-        "timeframes": ["M1"],
+        "timeframes": ["M1","M15","H1","M5"],
         "asset": "EURUSD",
 
         "risk_management":{
-            "MIN_Prob": 0.85,
+            "MIN_Prob": 0.7,
             "DD_Monthly" : 0.08,
             "Max_No_Trade_Daily": 10
         },

@@ -135,70 +135,70 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
     - Execution time for each loop is logged for performance monitoring.
     - The function is wrapped in a try-except block to handle unexpected errors gracefully and log them appropriately.
     """
-    
-    try:
-        start_time = time.time()
-        profiler = cProfile.Profile()
-        profiler.enable()
-        
-        # Step 1: Fetch Data
-        if parameters.shutdown_flag:
-            return
-        
+    while is_trading_hours_now() and (not parameters.shutdown_flag):
         try:
-            The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
-        except RuntimeError as The_error:
-            print_and_logging_Function("critical", f"Critical failure in fetching {The_timeframe} data: {The_error}", "title")
-            parameters.shutdown_flag = True
-            The_Collected_DataSet = pd.DataFrame()
-        
-        if parameters.shutdown_flag:
-            return
-        
-        CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
-
-        # Step 2: Detect Flags
-        try:
-            await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
-        except RuntimeError as The_error:
-            print_and_logging_Function("critical", f"Critical failure in flag detection {The_timeframe}: {The_error}", "title")
+            start_time = time.time()
+            profiler = cProfile.Profile()
+            profiler.enable()
             
-        if parameters.shutdown_flag:
-            return
+            # Step 1: Fetch Data
+            if parameters.shutdown_flag:
+                return
+            
+            try:
+                The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
+            except RuntimeError as The_error:
+                print_and_logging_Function("critical", f"Critical failure in fetching {The_timeframe} data: {The_error}", "title")
+                parameters.shutdown_flag = True
+                The_Collected_DataSet = pd.DataFrame()
+            
+            if parameters.shutdown_flag:
+                return
+            
+            CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
 
-        # step 3: Validate DPs and Flags
-        try:
-            await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
-        except RuntimeError as The_error:
-            print_and_logging_Function("critical", f"Critical failure in validating DPs {The_timeframe}: {The_error}", "title")
-        
-        if parameters.shutdown_flag:
-            return
-        # step 4: Train ML
-        try:
-            await run_with_retries_Function(CTimeFrames[The_index].ML_Main_Function)
-        except RuntimeError as The_error:
-            print_and_logging_Function("critical", f"Critical failure in ML {The_timeframe}: {The_error}", "title")
-        
-        if parameters.shutdown_flag:
-            return    
-        
-        # step 5: Update and open Positions
-        try:
-            await run_with_retries_Function(CTimeFrames[The_index].Update_Positions_Function)
-        except RuntimeError as The_error:
-            print_and_logging_Function("critical", f"Critical failure in updating Positions {The_timeframe}: {The_error}", "title")
+            # Step 2: Detect Flags
+            try:
+                await run_with_retries_Function(CTimeFrames[The_index].detect_flags_Function)
+            except RuntimeError as The_error:
+                print_and_logging_Function("critical", f"Critical failure in flag detection {The_timeframe}: {The_error}", "title")
+                
+            if parameters.shutdown_flag:
+                return
 
-        profiler.disable()
-        elapsed = time.time() - start_time
-        if config['runtime']['develop_mode'] :
-            print_and_logging_Function("info",f"For Each loop of Each timeframe: {elapsed:.2f} seconds", "title")
-            # profiler.print_stats(sort='cumtime')
-        
-        # preventing spam requests
-        await asyncio.sleep(60)
-    except Exception as e:
-        print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
+            # step 3: Validate DPs and Flags
+            try:
+                await run_with_retries_Function(CTimeFrames[The_index].validate_DPs_Function)
+            except RuntimeError as The_error:
+                print_and_logging_Function("critical", f"Critical failure in validating DPs {The_timeframe}: {The_error}", "title")
+            
+            if parameters.shutdown_flag:
+                return
+            # step 4: Train ML
+            try:
+                await run_with_retries_Function(CTimeFrames[The_index].ML_Main_Function)
+            except RuntimeError as The_error:
+                print_and_logging_Function("critical", f"Critical failure in ML {The_timeframe}: {The_error}", "title")
+            
+            if parameters.shutdown_flag:
+                return    
+            
+            # step 5: Update and open Positions
+            try:
+                await run_with_retries_Function(CTimeFrames[The_index].Update_Positions_Function)
+            except RuntimeError as The_error:
+                print_and_logging_Function("critical", f"Critical failure in updating Positions {The_timeframe}: {The_error}", "title")
+
+            profiler.disable()
+            elapsed = time.time() - start_time
+            if config['runtime']['develop_mode'] :
+                print_and_logging_Function("info",f"For Each loop of Each timeframe: {elapsed:.2f} seconds", "title")
+                # profiler.print_stats(sort='cumtime')
+            
+            # preventing spam requests
+            await asyncio.sleep(60)
+        except Exception as e:
+            print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
 
 async def main():   
     while not parameters.shutdown_flag:
