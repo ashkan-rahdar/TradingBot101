@@ -212,7 +212,7 @@ class Flag_Class:
             if not filtered_lows.empty:
                 aDP.used_ratio = (aDP.High.price - filtered_lows.min()) / (aDP.High.price - aDP.Low.price)
                 aDP.Is_used_half = aDP.used_ratio >= 0.5
-                aDP.Is_golfed =  aDP.Is_golfed >= 1
+                aDP.Is_golfed =  aDP.used_ratio >= 1
         elif aDP.trade_direction == "Bearish":
             mask = (Dataset['high'] >= aDP.Low.price) & (Dataset['high'] <= aDP.High.price)
             filtered_highs = Dataset['high'][mask]
@@ -220,7 +220,7 @@ class Flag_Class:
             if not filtered_highs.empty:
                 aDP.used_ratio = (filtered_highs.max() - aDP.Low.price) / (aDP.High.price - aDP.Low.price)
                 aDP.Is_used_half = aDP.used_ratio >= 0.5
-                aDP.Is_golfed =  aDP.Is_golfed >= 1
+                aDP.Is_golfed =  aDP.used_ratio >= 1
                 
         aDP.ratio_to_flag = (aDP.High.price - aDP.Low.price) / (self.high.price - self.low.price)
         aDP.parent_length = self.length
