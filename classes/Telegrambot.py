@@ -95,9 +95,9 @@ class Telegrambot_Class():
         else:
             path.unlink()  # all sent successfully
         
-    def notify_placed_position(self, direction: typing.Literal["Buy Limit", "Sell Limit"], price: int, sl: int, tp: int, vol: int, chance: int, order_Id: int, chat_id: str = config['chat_id']):
+    def notify_placed_position(self, timeframe: str, direction: typing.Literal["Buy Limit", "Sell Limit"], price: int, sl: int, tp: int, vol: int, chance: int, order_Id: int, chat_id: str = config['chat_id']):
         text = (
-            "*`{}` Position Placed*\n"
+            "*`{}` `{}` Position Placed*\n"
             " `{}` % chance \n\n"
             "*Price:*   `{}`\n"
             "*SL:*   `{}`\n"
@@ -105,6 +105,7 @@ class Telegrambot_Class():
             "*Volume:*   `{}`\n"
             "*Order ID:*   `{}`"
         ).format(
+            timeframe,
             "🟢" + direction if direction == "Buy Limit" else "🔴" + direction,
             chance,
             self.escape_md(str(price)),
