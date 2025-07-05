@@ -11,6 +11,7 @@ import typing
 import pickle
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier, Pool
+import math
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -373,11 +374,17 @@ class Timeframe_Class:
             model_cache_path = f"{DP_type}_{self.timeframe}_models.pkl"
 
             # --- Use Cached Models if Available and Not Due for Retrain ---
-            if os.path.exists(model_cache_path) and self.retrain_counters[DP_type] < RETRAIN_EVERY:
+            if os.path.exists(model_cache_path):
                 with open(model_cache_path, "rb") as f:
-                    models, model_weights = pickle.load(f)
-                print_and_logging_Function("info", f"ML Engine {self.timeframe}: Using cached model for DP type '{DP_type}'. Retraining in {RETRAIN_EVERY - self.retrain_counters[DP_type]} iterations.","title")
-                return models, model_weights
+                    prev_models, prev_model_weights, prev_model_score = pickle.load(f)
+                    
+                if self.retrain_counters[DP_type] < RETRAIN_EVERY:
+                    print_and_logging_Function("info", f"ML Engine {self.timeframe}: Using cached model for DP type '{DP_type}'. Retraining in {RETRAIN_EVERY - self.retrain_counters[DP_type]} iterations.","title")
+                    return prev_models, prev_model_weights
+            else:
+                prev_model_score = -1
+                prev_models = {float("nan"): CatBoostClassifier()}
+                prev_model_weights = {}
 
             # --- Otherwise, Retrain and Overwrite Cache ---
             self.retrain_counters[DP_type] = 0  # Reset counter
@@ -395,9 +402,10 @@ class Timeframe_Class:
             model_weights : dict[float, float] = {}
 
             if y_test.shape[0] <= MIN_Test_Dataset_size:
-                print_and_logging_Function("warning",f"Testing Dataset is under valid size: {MIN_Test_Dataset_size}. Using Total Dataset for weighting models...", "title")
-                y_test = Output
-                X_test = Input
+                print_and_logging_Function("warning",f"{self.timeframe} Testing Dataset is under valid size: {MIN_Test_Dataset_size}. No Valid model.", "title")
+                return {float("nan"): CatBoostClassifier()} , {}
+                # y_test = Output
+                # X_test = Input
             
             for rr in RR_values:
                 try:
@@ -422,7 +430,8 @@ class Timeframe_Class:
                         early_stopping_rounds=50,
                         auto_class_weights='Balanced',
                         verbose=False,
-                        allow_writing_files=False
+                        allow_writing_files=False,
+                        random_seed = self.RANDOM_STATE
                     )
                     model.fit(train_pool)
                     models[rr] = model
@@ -501,17 +510,28 @@ class Timeframe_Class:
                                                                                         Estimated_trade_nums_Daily= Max_No_Trade_Daily,
                                                                                         Trade_RR= best_rr)
                         total_trades += 1
-            winrate = succeeded_trades / total_trades if total_trades > 0 else 0
-            print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test * 100} percent profit with the {winrate} winrate in {total_trades} trades", "title")
-            if winrate <= (TARGET_PROB**2) and result_on_test <= 0 :
-                models = {float("nan"): CatBoostClassifier()} 
+            if total_trades > 0:
+                winrate = succeeded_trades / total_trades
+                print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test * 100} percent profit with the {winrate} winrate in {total_trades} trades", "title")
+            else:
+                winrate = 0
+                
+            if winrate <= (TARGET_PROB**2) and result_on_test <= 0 : 
                 self.RANDOM_STATE = random.randint(10, 50)
                 print_and_logging_Function("warning", "Based on current data Bot is not profitable", "title")
+                return {float("nan"): CatBoostClassifier()} , {}
                 
-            # Save updated models and weights
-            with open(model_cache_path, "wb") as f:
-                pickle.dump((models, model_weights), f)
-            return models, model_weights
+            # Save updated models and weights if needed
+            model_score = self.model_score_Function(winrate= winrate, pnl_percent= result_on_test*100, num_trades= total_trades)
+            
+            if model_score >= prev_model_score:
+                with open(model_cache_path, "wb") as f:
+                    pickle.dump((models, model_weights, model_score), f)
+                
+                return models, model_weights                
+            else:
+                return prev_models, prev_model_weights
+                    
         except Exception as e:
             print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{e}", "title")
             return {float("nan"): CatBoostClassifier()} , {}
@@ -563,10 +583,10 @@ class Timeframe_Class:
         modifying_TP_DB: list[tuple[int, float]] = []
 
         for aDP, The_index, Estimated_Risk, Estimated_RR, probability in self.Do_Trade_DpList:
-            # Trade new detected DPs
             if The_index is None:
                 continue
             
+            # Trade new detected DPs            
             if The_index not in self.CMySQL_DataBase.Traded_DP_Dict.keys():
                 try:
                     if aDP.trade_direction == "Bullish":    
@@ -620,7 +640,7 @@ class Timeframe_Class:
                         print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
                         self.CMySQL_DataBase.Traded_DP_Dict[The_index] = {"TP": result.request.tp, "Vol": result.request.volume, "Order_ID": result.order} # type: ignore
                         try:
-                            CTelegramBot.notify_placed_position(order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100), result.order) # type: ignore
+                            CTelegramBot.notify_placed_position(self.timeframe, order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100), result.order) # type: ignore
                         except Exception as e:
                             print_and_logging_Function("error", f"{e}", "title")
 
@@ -652,7 +672,7 @@ class Timeframe_Class:
                             # ========================================================
                         else:
                             CTelegramBot.send_message(
-                                text=f"✏️ Take-Profit Updated\n\nOrder ID: {self.CMySQL_DataBase.Traded_DP_Dict[The_index]['Order_ID']}\nPrevious TP: {previous_info['TP']}\nNew TP: {result.request.tp}\n\nThis adjustment was made based on updated system logic."  # type: ignore
+                                text=f"✏️ Take-Profit Updated\n {self.timeframe} \n\nOrder ID: {self.CMySQL_DataBase.Traded_DP_Dict[The_index]['Order_ID']}\nPrevious TP: {previous_info['TP']}\nNew TP: {result.request.tp}\n\nThis adjustment was made based on updated system logic."  # type: ignore
                             )
                             self.CMySQL_DataBase.Traded_DP_Dict[str(The_index)]["TP"] = float(result.request.tp)
                             modifying_TP_DB.append((self.CMySQL_DataBase.Traded_DP_Dict[The_index]['Order_ID'], float(result.request.tp)))
@@ -695,7 +715,7 @@ class Timeframe_Class:
                         print_and_logging_Function("info", f"Cancelled order {order_ID}. No more valid position", "description")
                         cancelled_positions_IDs[The_index] = order_ID
                         CTelegramBot.send_message(
-                            text=f"🚫 Order Cancelled\n\nOrder ID: {order_ID}\nReason: The setup is no longer valid based on current market conditions.\n\nTrade opportunity has been dismissed to ensure risk protection."
+                            text=f"🚫 Order Cancelled\n {self.timeframe} \n\nOrder ID: {order_ID}\nReason: The setup is no longer valid based on current market conditions.\n\nTrade opportunity has been dismissed to ensure risk protection."
                         )
                  
             
@@ -708,12 +728,12 @@ class Timeframe_Class:
         try:
             if is_forced:
                 CTelegramBot.send_message(text=
-                                        "⚠️Attention: Closing Positions⚠️\n\n"
+                                        f"⚠️Attention: Closing {self.timeframe} Positions⚠️\n\n"
                                         "Due to system conditions, please close all Pending positions immediately to avoid potential risk." 
                                         "Please wait for further notice.")
             else:
                 CTelegramBot.send_message(text=
-                                        "🔒 Session Closure Notice\n\n"
+                                        f"🔒 {self.timeframe} Session Closure Notice\n\n"
                                         "All open positions are being closed as the trading session has ended. "
                                         "This action is taken as a precautionary risk management measure to prevent exposure during non-trading hours.\n\n"
                                         "📉 Please refrain from opening new positions until the next valid trading session begins. "
@@ -756,5 +776,17 @@ class Timeframe_Class:
                 print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
         except Exception as e:
             raise Exception(f"Error in calculating / Notify user PNL: {e}")
-               
+      
+    @staticmethod
+    def model_score_Function(winrate: float, pnl_percent: float, num_trades: int,
+                winrate_weight: float = 0.4, PNL_weight: float = 0.6, num_trades_weight: float = 50) -> float:
+        if num_trades == 0:
+            return -1  # Invalid model
+
+        pnl_per_trade = pnl_percent / num_trades
+        confidence_penalty = 1 - math.exp(-num_trades / num_trades_weight)
+
+        score = ((winrate * winrate_weight) + (pnl_per_trade * PNL_weight)) * confidence_penalty
+        return score    
+         
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]
