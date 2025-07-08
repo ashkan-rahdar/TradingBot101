@@ -201,9 +201,9 @@ class Timeframe_Class:
             try:
                 await self.CMySQL_DataBase._update_dp_Results_Function(self.inserting_BackTest_DB)
                 if len(self.inserting_BackTest_DB) > 0 :
-                    print_and_logging_Function("info", f"{len(self.inserting_BackTest_DB)} backtest positions inserted in DB", "description")
+                    print_and_logging_Function("info", f"{self.timeframe} -> {len(self.inserting_BackTest_DB)} backtest positions inserted in DB", "description")
             except Exception as e:
-                print_and_logging_Function("error", f"Error in inserting BackTest position in DB: {e}", "title")
+                print_and_logging_Function("error", f"{self.timeframe} -> Error in inserting BackTest position in DB: {e}", "title")
                 
             # Batch update the database
             if self.dps_to_update:
@@ -213,7 +213,7 @@ class Timeframe_Class:
                     raise e
                 
         except Exception as e:
-            print_and_logging_Function("error", f"Error in validating DPs: {e}", "title")
+            print_and_logging_Function("error", f"{self.timeframe} -> Error in validating DPs: {e}", "title")
             
     async def Each_DP_validation_Function(self, aDP: DP_Parameteres_Class, The_index_DP: str):
         """
@@ -378,7 +378,7 @@ class Timeframe_Class:
                     prev_models, prev_model_weights, prev_model_score = pickle.load(f)
                     
                 if self.retrain_counters[DP_type] < RETRAIN_EVERY:
-                    print_and_logging_Function("info", f"ML Engine {self.timeframe}: Using cached model for DP type '{DP_type}'. Retraining in {RETRAIN_EVERY - self.retrain_counters[DP_type]} iterations.","title")
+                    print_and_logging_Function("info", f"{self.timeframe} -> ML Engine: Using cached model for DP type '{DP_type}'. Retraining in {RETRAIN_EVERY - self.retrain_counters[DP_type]} iterations.","title")
                     return prev_models, prev_model_weights
             else:
                 prev_model_score = -1
@@ -392,8 +392,9 @@ class Timeframe_Class:
             X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state = self.RANDOM_STATE)
             X_train = pd.DataFrame(X_train)
             X_test = pd.DataFrame(X_test)
-            y_train = pd.DataFrame(y_train)
-            y_test = pd.DataFrame(y_test)
+            y_train = pd.Series(y_train).reset_index(drop=True)
+            y_test = pd.Series(y_test).reset_index(drop=True)
+
             
             categorical_features = ["Is_related_DP_used", "Is_golfed", "Is_used_half"]
             
@@ -401,7 +402,7 @@ class Timeframe_Class:
             model_weights : dict[float, float] = {}
 
             if y_test.shape[0] <= MIN_Test_Dataset_size:
-                print_and_logging_Function("warning",f"{self.timeframe} Testing Dataset is under valid size: {MIN_Test_Dataset_size}. No Valid model.", "title")
+                print_and_logging_Function("warning",f"{self.timeframe} -> Testing Dataset is under valid size: {MIN_Test_Dataset_size}. No Valid model.", "title")
                 return {float("nan"): CatBoostClassifier()} , {}
             
                 ##### Able to trade if dataset is close or not ?!
@@ -410,7 +411,7 @@ class Timeframe_Class:
             
             for rr in RR_values:
                 try:
-                    print_and_logging_Function("info", f"Training the {rr} model for {DP_type} {self.timeframe}", "title")
+                    print_and_logging_Function("info", f"{self.timeframe} -> Training the {rr} model for {DP_type} {self.timeframe}", "title")
                     # Binary label for this RR
                     y_train_bin : pd.DataFrame = (y_train >= rr).astype(int)
                     y_test_bin : pd.DataFrame = (y_test >= rr).astype(int)
@@ -449,7 +450,7 @@ class Timeframe_Class:
 
                     # Check if any high-probability samples exist
                     if (df["bucket"] == "high").sum() == 0:
-                        print_and_logging_Function("warning",f"RR {rr} Timeframe {self.timeframe} -> \n No predictions with prob >= {TARGET_PROB}. \n Model is too conservative or threshold too high.Won't be considered as a valid model","title")
+                        print_and_logging_Function("warning",f"{self.timeframe} -> RR {rr} -> \n No predictions with prob >= {TARGET_PROB}. \n Model is too conservative or threshold too high.Won't be considered as a valid model","title")
                         model_weights[rr] = 0.0
                         continue
 
@@ -462,7 +463,7 @@ class Timeframe_Class:
                     # Check high-prob group
                     high = bucket_summary.loc["high"]
                     if high["empirical_winrate"].item() < high["predicted_prob"].item() - 0.2:
-                        print_and_logging_Function("warning",f"RR {rr} Timeframe {self.timeframe} -> \n High-prob group underperforms: empirical winrate {high['empirical_winrate']:.2f} is more than 0.2 less than predicted {high['predicted_prob']:.2f}.\n Won't be considered as a valid model", "title")
+                        print_and_logging_Function("warning",f"{self.timeframe} -> RR {rr} -> \n High-prob group underperforms: empirical winrate {high['empirical_winrate']:.2f} is more than 0.2 less than predicted {high['predicted_prob']:.2f}.\n Won't be considered as a valid model", "title")
                         model_weights[rr] = 0.0
                         continue
 
@@ -470,7 +471,7 @@ class Timeframe_Class:
                     if "low" in bucket_summary.index:
                         low = bucket_summary.loc["low"]
                         if low["empirical_winrate"].item() > 0.5:
-                            print_and_logging_Function("warning",f"RR {rr} Timeframe {self.timeframe} -> \n Low-prob group too strong: empirical winrate is {low['empirical_winrate']:.2f} (> 0.5), check model discrimination. \n Won't be considered as a valid model", "title")
+                            print_and_logging_Function("warning",f"{self.timeframe} -> RR {rr} -> \n Low-prob group too strong: empirical winrate is {low['empirical_winrate']:.2f} (> 0.5), check model discrimination. \n Won't be considered as a valid model", "title")
                             model_weights[rr] = 0.0
                             continue
                     model_weights[rr] = (high["empirical_winrate"].item() / high["predicted_prob"].item())
@@ -513,13 +514,13 @@ class Timeframe_Class:
                         total_trades += 1
             if total_trades > 0:
                 winrate = succeeded_trades / total_trades
-                print_and_logging_Function("info", f"The result of BackTest on test dataset: \n {result_on_test * 100} percent profit with the {winrate} winrate in {total_trades} trades", "title")
+                print_and_logging_Function("info", f"{self.timeframe} -> The result of BackTest on test dataset: \n {result_on_test * 100} percent profit with the {winrate} winrate in {total_trades} trades", "title")
             else:
                 winrate = 0
                 
             if winrate <= (TARGET_PROB**2) and result_on_test <= 0 : 
                 self.RANDOM_STATE = random.randint(10, 50)
-                print_and_logging_Function("warning", "Based on current data Bot is not profitable", "title")
+                print_and_logging_Function("warning", f"{self.timeframe} -> Based on current data Bot is not profitable", "title")
                 return {float("nan"): CatBoostClassifier()} , {}
                 
             # Save updated models and weights if needed
@@ -529,14 +530,14 @@ class Timeframe_Class:
                 with open(model_cache_path, "wb") as f:
                     pickle.dump((models, model_weights, model_score), f)
                 
-                print_and_logging_Function("info", f"{self.timeframe} model is updated. new score -> {model_score} prev score -> {prev_model_score}")
+                print_and_logging_Function("info", f"{self.timeframe} -> model is updated. new score -> {model_score} prev score -> {prev_model_score}")
                 return models, model_weights                
             else:
-                print_and_logging_Function("info", f"{self.timeframe} model did not updated. new score -> {model_score} prev score -> {prev_model_score}. Previous model will be used!")
+                print_and_logging_Function("info", f"{self.timeframe} ->  model did not updated. new score -> {model_score} prev score -> {prev_model_score}. Previous model will be used!")
                 return prev_models, prev_model_weights
                     
         except Exception as e:
-            print_and_logging_Function("error", f"An error occured in Backtesting the ML on Test Dataset:{e}", "title")
+            print_and_logging_Function("error", f"{self.timeframe} -> An error occured in Backtesting the ML on Test Dataset:{e}", "title")
             return {float("nan"): CatBoostClassifier()} , {}
     
     async def Update_Positions_Function(self):
@@ -619,7 +620,7 @@ class Timeframe_Class:
                     # ========================================================
                     
                     elif result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
-                        print_and_logging_Function("error", f"Error in opening position of DP No.{The_index}. The message \n {result}", "title")
+                        print_and_logging_Function("error", f"{self.timeframe} -> Error in opening position of DP No.{The_index}. The message \n {result}", "title")
                     else:
                         if not config["runtime"]["Able_to_Open_positions"]:
                             CMetatrader_Module.cancel_order(result.order) # type: ignore
@@ -640,15 +641,15 @@ class Timeframe_Class:
                         )) # type: ignore
 
                         new_opened_positions += 1
-                        print_and_logging_Function("info", f"New position opened: DP {The_index}", "description")
+                        print_and_logging_Function("info", f"{self.timeframe} -> New position opened: DP {The_index}", "description")
                         self.CMySQL_DataBase.Traded_DP_Dict[The_index] = {"TP": result.request.tp, "Vol": result.request.volume, "Order_ID": result.order} # type: ignore
                         try:
                             CTelegramBot.notify_placed_position(self.timeframe, order_type, result.request.price, result.request.sl, result.request.tp, result.request.volume, int(probability * 100), result.order) # type: ignore
                         except Exception as e:
-                            print_and_logging_Function("error", f"{e}", "title")
+                            print_and_logging_Function("error", f"{self.timeframe} -> {e}", "title")
 
                 except RuntimeError as e:
-                    print_and_logging_Function("error", f"Error in opening the position of DP No. {The_index}: {e}")
+                    print_and_logging_Function("error", f"{self.timeframe} -> Error in opening the position of DP No. {The_index}: {e}")
             # Modify Trades which their info has been changed
             else:
                 try:
@@ -686,22 +687,22 @@ class Timeframe_Class:
                     # ========================================================
                     
                 except Exception as e:
-                    print_and_logging_Function("error", e, "title") # type: ignore
+                    print_and_logging_Function("error", f"{self.timeframe} -> Error in modifying positions: {e}", "title") # type: ignore
         
         # insert The new positions in DB
         try:
             await self.CMySQL_DataBase._insert_positions_batch(inserting_positions_DB)
             if new_opened_positions:
-                print_and_logging_Function("info", f"{new_opened_positions} New positions opened and inserted in DB", "title")
+                print_and_logging_Function("info", f"{self.timeframe} -> {new_opened_positions} New positions opened and inserted in DB", "title")
         except Exception as e:
-            print_and_logging_Function("error", f"Error in inserting position in DB: {e}", "title")
+            print_and_logging_Function("error", f"{self.timeframe} -> Error in inserting position in DB: {e}", "title")
             
             
         # Update The modified positions in DB
         try:
             await self.CMySQL_DataBase.update_position_TPs_batch_Function(modifying_TP_DB)
         except Exception as e:
-            print_and_logging_Function("error", f"Error in Updating The modified positions in DB: {e}", "title")
+            print_and_logging_Function("error", f"{self.timeframe} -> Error in Updating The modified positions in DB: {e}", "title")
         
         # Cancel positions which are not valid anymore
         try:
@@ -713,9 +714,9 @@ class Timeframe_Class:
                 if The_index not in valid_trade_indices:
                     result = CMetatrader_Module.cancel_order(order_ID)
                     if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
-                        print_and_logging_Function("error", f"Error in canceling {order_ID} position: {result}", "title")
+                        print_and_logging_Function("error", f"{self.timeframe} -> Error in canceling {order_ID} position: {result}", "title")
                     else:
-                        print_and_logging_Function("info", f"Cancelled order {order_ID}. No more valid position", "description")
+                        print_and_logging_Function("info", f"{self.timeframe} -> Cancelled order {order_ID}. No more valid position", "description")
                         cancelled_positions_IDs[The_index] = order_ID
                         CTelegramBot.send_message(
                             text=f"🚫 Order Cancelled\n {self.timeframe} \n\nOrder ID: {order_ID}\nReason: The setup is no longer valid based on current market conditions.\n\nTrade opportunity has been dismissed to ensure risk protection."
@@ -724,7 +725,7 @@ class Timeframe_Class:
             
             await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
         except Exception as e:
-            print_and_logging_Function("error", f"Error in canceling invalid positions: {e}", "title")    
+            print_and_logging_Function("error", f"{self.timeframe} -> Error in canceling invalid positions: {e}", "title")    
       
     async def Closing_positions_Function(self, is_forced: bool = False):
         # Alert users in Telegram
@@ -743,7 +744,7 @@ class Timeframe_Class:
                                         "You will be notified when trading resumes.")
                 
         except Exception as e:
-            print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
+            print_and_logging_Function("error", f"{self.timeframe} -> Error in sending message to Telegram for canceling positions...: {e}")
         
         # Cancel pending positions and remove from DB and memory
         try:
@@ -752,14 +753,14 @@ class Timeframe_Class:
             for DP_Index, order_ID in Pending_position_IDs.items():
                 result = CMetatrader_Module.cancel_order(order_ID)
                 if result.retcode != CMetatrader_Module.mt.TRADE_RETCODE_DONE: # type: ignore
-                    print_and_logging_Function("error", f"Error in canceling {order_ID} position: {result}", "title")
+                    print_and_logging_Function("error", f"{self.timeframe} -> Error in canceling {order_ID} position: {result}", "title")
                 else:
-                    print_and_logging_Function("info", f"Cancelled order {order_ID}", "description")
+                    print_and_logging_Function("info", f"{self.timeframe} -> Cancelled order {order_ID}", "description")
                     cancelled_positions_IDs[DP_Index] = order_ID
                     
             await self.CMySQL_DataBase.remove_cancelled_positions_Function(cancelled_positions_IDs)
         except Exception as e:
-            print_and_logging_Function("error", f"Error in canceling positions: {e}")
+            print_and_logging_Function("error", f"{self.timeframe} -> Error in canceling positions: {e}")
     
     async def Result_Reporter_Function(self):
         try:
@@ -776,8 +777,8 @@ class Timeframe_Class:
                     )
                 )
             except Exception as e:
-                print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
+                print_and_logging_Function("error", f"{self.timeframe} -> Error in sending message to Telegram for canceling positions...: {e}")
         except Exception as e:
-            raise Exception(f"Error in calculating / Notify user PNL: {e}")    
+            raise Exception(f"{self.timeframe} -> Error in calculating / Notify user PNL: {e}")    
          
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]
