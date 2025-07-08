@@ -122,3 +122,16 @@ class Position_Manager_Class:
         kelly_fraction_risk = max(0.0, min(Kelly_Scale * kelly_fraction, Max_Kelly_Risk))
         
         return min(kelly_fraction_risk, Losing_streak_risk)
+    
+    
+    @staticmethod
+    def model_score_Function(winrate: float, pnl_percent: float, num_trades: int,
+                winrate_weight: float = 0.4, PNL_weight: float = 0.6, num_trades_weight: float = 50) -> float:
+        if num_trades == 0:
+            return -1  # Invalid model
+
+        pnl_per_trade = pnl_percent / num_trades
+        confidence_penalty = 1 - math.exp(-num_trades / num_trades_weight)
+
+        score = (winrate * winrate_weight) + ((pnl_per_trade / (DD_Daily/Max_No_Trade_Daily) )* PNL_weight) * confidence_penalty
+        return score

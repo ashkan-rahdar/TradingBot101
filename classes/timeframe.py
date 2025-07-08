@@ -11,7 +11,6 @@ import typing
 import pickle
 from sklearn.model_selection import train_test_split
 from catboost import CatBoostClassifier, Pool
-import math
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -404,6 +403,8 @@ class Timeframe_Class:
             if y_test.shape[0] <= MIN_Test_Dataset_size:
                 print_and_logging_Function("warning",f"{self.timeframe} Testing Dataset is under valid size: {MIN_Test_Dataset_size}. No Valid model.", "title")
                 return {float("nan"): CatBoostClassifier()} , {}
+            
+                ##### Able to trade if dataset is close or not ?!
                 # y_test = Output
                 # X_test = Input
             
@@ -522,14 +523,16 @@ class Timeframe_Class:
                 return {float("nan"): CatBoostClassifier()} , {}
                 
             # Save updated models and weights if needed
-            model_score = self.model_score_Function(winrate= winrate, pnl_percent= result_on_test*100, num_trades= total_trades)
+            model_score = Position_Manager_Class.model_score_Function(winrate= winrate, pnl_percent= result_on_test*100, num_trades= total_trades)
             
-            if model_score >= prev_model_score:
+            if model_score > prev_model_score:
                 with open(model_cache_path, "wb") as f:
                     pickle.dump((models, model_weights, model_score), f)
                 
+                print_and_logging_Function("info", f"{self.timeframe} model is updated. new score -> {model_score} prev score -> {prev_model_score}")
                 return models, model_weights                
             else:
+                print_and_logging_Function("info", f"{self.timeframe} model did not updated. new score -> {model_score} prev score -> {prev_model_score}. Previous model will be used!")
                 return prev_models, prev_model_weights
                     
         except Exception as e:
@@ -775,18 +778,6 @@ class Timeframe_Class:
             except Exception as e:
                 print_and_logging_Function("error", f"Error in sending message to Telegram for canceling positions...: {e}")
         except Exception as e:
-            raise Exception(f"Error in calculating / Notify user PNL: {e}")
-      
-    @staticmethod
-    def model_score_Function(winrate: float, pnl_percent: float, num_trades: int,
-                winrate_weight: float = 0.4, PNL_weight: float = 0.6, num_trades_weight: float = 50) -> float:
-        if num_trades == 0:
-            return -1  # Invalid model
-
-        pnl_per_trade = pnl_percent / num_trades
-        confidence_penalty = 1 - math.exp(-num_trades / num_trades_weight)
-
-        score = ((winrate * winrate_weight) + (pnl_per_trade * PNL_weight)) * confidence_penalty
-        return score    
+            raise Exception(f"Error in calculating / Notify user PNL: {e}")    
          
 CTimeFrames = [Timeframe_Class(atimeframe) for atimeframe in config["trading_configs"]["timeframes"]]
