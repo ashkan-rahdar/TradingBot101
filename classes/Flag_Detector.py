@@ -116,7 +116,7 @@ class FlagDetector_Class:
         """
         
         local_tasks = []
-        print_and_logging_Function("info", f" Bullish Flag Detecting of {self.TimeFrame} started...", "description")
+        print_and_logging_Function("info", f"{self.TimeFrame} -> Bullish Flag Detecting of {self.TimeFrame} started...", "description")
         highs = The_dataset['high']
         lows = The_dataset['low']
 
@@ -221,7 +221,7 @@ class FlagDetector_Class:
         """
         
         local_tasks = []
-        print_and_logging_Function("info", f" Bearish Flag Detecting of {self.TimeFrame} started...", "description")
+        print_and_logging_Function("info", f"{self.TimeFrame} -> Bearish Flag Detecting of {self.TimeFrame} started...", "description")
         highs = The_dataset['high']
         lows = The_dataset['low']
 
@@ -343,8 +343,8 @@ class FlagDetector_Class:
             tasks.append(asyncio.create_task(self.detect_bearish_flags_Function(The_dataset)))
             tasks.append(asyncio.create_task(self.CDataBase.save_flags_Function(self.Detected_Flags)))
             await asyncio.gather(*tasks)
-            print_and_logging_Function("info", f"Flag Detection of {self.TimeFrame} completed", "title")
-            print_and_logging_Function("info", f"{self.CDataBase.detected_flags} New Flags detected", "description")
+            print_and_logging_Function("info", f"{self.TimeFrame} -> Flag Detection of {self.TimeFrame} completed", "title")
+            print_and_logging_Function("info", f"{self.TimeFrame} -> {self.CDataBase.detected_flags} New Flags detected", "description")
         except Exception as e:
-            print_and_logging_Function("error", f"An error occurred during detection: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> An error occurred during detection: {e}", "title")
             raise

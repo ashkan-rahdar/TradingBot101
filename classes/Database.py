@@ -75,12 +75,12 @@ class Database_Class:
         self.detected_flags = 0
         self.Traded_DP_Dict: dict[str, TradeInfo] = {}
         self.db_pool = None
-        print_and_logging_Function("info", f"Database for {The_timeframe} initialized.", "description")
+        print_and_logging_Function("info", f"{self.TimeFrame} -> Database for {The_timeframe} initialized.", "description")
         
         try:
             self._initialize_tables_Function()
         except Exception as e:
-            print_and_logging_Function("error", f"Database initialization failed: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Database initialization failed: {e}", "title")
 
     def _initialize_tables_Function(self):
         # in here I haven't used "FOREIGN KEY" due to I would insert tables using batch and table by table
@@ -172,12 +172,12 @@ class Database_Class:
                         cursor.execute(f"DROP TRIGGER IF EXISTS {trigger.split()[2]}")
                         cursor.execute(trigger)
                     except Exception as e:
-                        print_and_logging_Function("warning", f"Trigger creation failed: {e}", "title")
+                        print_and_logging_Function("warning", f"{self.TimeFrame} -> Trigger creation failed: {e}", "title")
 
                 conn.commit()
-                print_and_logging_Function("info", f"{self.TimeFrame} Tables and triggers created successfully!", "title")
+                print_and_logging_Function("info", f"{self.TimeFrame} -> Tables and triggers created successfully!", "title")
         except Exception as e:
-            print_and_logging_Function("error", f"Couldn't initialize DB: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Couldn't initialize DB: {e}", "title")
 
     async def initialize_db_pool_Function(self):
         if self.db_pool is None:
@@ -191,7 +191,7 @@ class Database_Class:
                     minsize=5,
                     maxsize=20)
             except Exception as e:
-                print_and_logging_Function("error", f"Error in initializing DP pool: {e}", "title")
+                print_and_logging_Function("error", f"{self.TimeFrame} -> Error in initializing DP pool: {e}", "title")
 
     async def save_flags_Function(self, flag_list: list[Flag_Class]):
         """
@@ -339,7 +339,7 @@ class Database_Class:
 
                 except Exception as e:
                     await conn.rollback()
-                    print_and_logging_Function("error", f"Error batch saving flags: {e}", "title")
+                    print_and_logging_Function("error", f"{self.TimeFrame} -> Error batch saving flags: {e}", "title")
 
     async def _update_dp_weights_Function(self, dps_to_update: list):
         """
@@ -372,7 +372,7 @@ class Database_Class:
                     await cursor.executemany(query, values)  # Perform the batch update
                     await conn.commit()  # Commit the transaction
         except Exception as e:
-            print_and_logging_Function("error", f"Error in batch updating DP weights: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Error in batch updating DP weights: {e}", "title")
             await conn.rollback()  # type: ignore # Rollback if there's an error
 
     async def _update_dp_Results_Function(self, dps_to_update: list):
@@ -406,7 +406,7 @@ class Database_Class:
                     await cursor.executemany(query, values)  # Perform the batch update
                     await conn.commit()  # Commit the transaction
         except Exception as e:
-            print_and_logging_Function("error", f"Error in batch updating DP Results: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Error in batch updating DP Results: {e}", "title")
             await conn.rollback()  # type: ignore # Rollback if there's an error
             
     async def _get_update_DPlist_Function(self) -> list[tuple[DP_Parameteres_Class, str]]:
@@ -532,7 +532,7 @@ class Database_Class:
 
                     return dps
         except Exception as e:
-            print_and_logging_Function("error", f"Error in fetching tradeable DPs: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Error in fetching tradeable DPs: {e}", "title")
             return []
     
     async def _get_tradeable_DPs_Function(self, dp_ids: list[str]) -> list[DP_Parameteres_Class]:
@@ -631,7 +631,7 @@ class Database_Class:
         except Exception as e:
             print_and_logging_Function(
                 "error",
-                f"Error in fetch_DPs_by_id for IDs {dp_ids}: {e}",
+                f"{self.TimeFrame} -> Error in fetch_DPs_by_id for IDs {dp_ids}: {e}",
                 "title"
             )
             return []
@@ -747,7 +747,7 @@ class Database_Class:
                     # return FTC_Input, FTC_Output, EL_Input, EL_Output, MPL_Input, MPL_Output
                     return FTC_Input, FTC_Output # type: ignore
         except Exception as e:
-            print_and_logging_Function("error", f"Error in fetching ML Dataset: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Error in fetching ML Dataset: {e}", "title")
             return pd.DataFrame(), pd.DataFrame()
     
     async def Read_Pending_Positions_Function(self) -> dict[str, int]:
@@ -767,7 +767,7 @@ class Database_Class:
                         rows = await cursor.fetchall()
                         order_IDs = {row[0]: row[1] for row in rows}
 
-                        # print_and_logging_Function("info", f"ID Open positions: {order_IDs.values()}", "description")
+                        # print_and_logging_Function("info", f"{self.TimeFrame} -> ID Open positions: {order_IDs.values()}", "description")
                         return order_IDs
                     except Exception as e:
                         raise e
@@ -775,7 +775,7 @@ class Database_Class:
                         await cursor.close()
 
         except Exception as e:
-            print_and_logging_Function("error", f"Error in fetching open positions: {e}", "title")
+            print_and_logging_Function("error", f"{self.TimeFrame} -> Error in fetching open positions: {e}", "title")
             return {}
 
     async def remove_cancelled_positions_Function(self, cancelled_list_dict: dict[str, int]):
@@ -794,7 +794,7 @@ class Database_Class:
                     async with conn.cursor() as cursor:
                         await cursor.execute(query, values)
                         await conn.commit()
-                        print_and_logging_Function("info", f"Removed {values} cancelled positions from DB and memory.", "description")
+                        print_and_logging_Function("info", f"{self.TimeFrame} -> Removed {values} cancelled positions from DB and memory.", "description")
         except Exception as e:
             raise Exception(f"Error in removing the cancelled positions from DB: {e}")
     
