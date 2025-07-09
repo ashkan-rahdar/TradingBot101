@@ -499,7 +499,10 @@ class Timeframe_Class:
                 with open(model_cache_path, "wb") as f:
                     pickle.dump((models, model_weights, model_score), f)
                 
-                print_and_logging_Function("info", f"{self.timeframe} -> model is updated. new score -> {model_score} prev score -> {prev_model_score}")
+                print_and_logging_Function("info", f"{self.timeframe} -> ML model is updated. new score -> {model_score} prev score -> {prev_model_score}")
+                CTelegramBot.send_message(text=f"🧠 {self.timeframe} -> ML model is updated. new score -> {model_score} prev score -> {prev_model_score}"
+                                          f"\n\n\n Based on the new Backtest Result: \n PNL : {result_on_test / TEST_TRAIN_SPLIT}"
+                                          f"\n Winrate: {winrate} \n out of {total_trades} Trades")
                 return models, model_weights                
             else:
                 print_and_logging_Function("info", f"{self.timeframe} ->  model did not updated. new score -> {model_score} prev score -> {prev_model_score}. Previous model will be used!")
