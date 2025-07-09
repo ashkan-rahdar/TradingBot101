@@ -358,11 +358,16 @@ class Timeframe_Class:
             
             if all(probs[i] >= TARGET_PROB * 0.8 for i in range(best_rr_idx + 1)):
                 best_rr : float = RR_levels[best_rr_idx]
-                trade_risk_percent: float = 100 * Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_levels[best_rr_idx]]),
-                                                                                    Estimated_trade_nums_Daily= Max_No_Trade_Daily,
-                                                                                    Trade_RR= best_rr)
-                
-                self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), trade_risk_percent, best_rr, probs[best_rr_idx]*model_weights[RR_levels[best_rr_idx]]))
+                try:
+                    trade_risk_percent: float = 100 * Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_levels[best_rr_idx]]),
+                                                                                        Estimated_trade_nums_Daily= Max_No_Trade_Daily,
+                                                                                        Trade_RR= best_rr)
+                    if trade_risk_percent > 0 :
+                        self.Do_Trade_DpList.append((The_DP, The_DP.ID_generator_Function(), trade_risk_percent, best_rr, min(1,probs[best_rr_idx]*model_weights[RR_levels[best_rr_idx]])))
+                    else:
+                        raise Exception(f"Trade risk is calculated wrong: {trade_risk_percent}")
+                except Exception as e:
+                    print_and_logging_Function("error",f"{self.timeframe} -> Error in adding {The_DP.ID_generator_Function()} in Trade List: {e}")    
 
     def RR_ML_Training(self, RR_values: np.ndarray, Input: pd.DataFrame, Output: pd.DataFrame, DP_type: str = "FTC") -> tuple[dict[float, CatBoostClassifier], dict[float, float]]:
         try:
@@ -479,6 +484,37 @@ class Timeframe_Class:
                     raise Exception(f"Error-> ML engine -> training the ML model -> RR {rr} : {e}")
                         
             # Backtest filtering logic on test dataset
+            winrate, result_on_test, total_trades = self.BackTest_ML_Model_on_TestDataset_Function(X_test, y_test, RR_values, models, model_weights)
+                
+            if winrate <= (TARGET_PROB**2) and result_on_test <= 0 : 
+                self.RANDOM_STATE = random.randint(10, 50)
+                print_and_logging_Function("warning", f"{self.timeframe} -> Based on current data Bot is not profitable", "title")
+                return {float("nan"): CatBoostClassifier()} , {}
+                
+            # Save updated models and weights if needed
+            model_score = Position_Manager_Class.model_score_Function(winrate= winrate, pnl_percent= result_on_test*100, num_trades= total_trades)
+            
+            if model_score > prev_model_score:
+                with open(model_cache_path, "wb") as f:
+                    pickle.dump((models, model_weights, model_score), f)
+                
+                print_and_logging_Function("info", f"{self.timeframe} -> model is updated. new score -> {model_score} prev score -> {prev_model_score}")
+                return models, model_weights                
+            else:
+                print_and_logging_Function("info", f"{self.timeframe} ->  model did not updated. new score -> {model_score} prev score -> {prev_model_score}. Previous model will be used!")
+                return prev_models, prev_model_weights
+                    
+        except Exception as e:
+            print_and_logging_Function("error", f"{self.timeframe} -> An error occured in Backtesting the ML on Test Dataset:{e}", "title")
+            return {float("nan"): CatBoostClassifier()} , {}
+    
+    def BackTest_ML_Model_on_TestDataset_Function(self, 
+                                                  X_test: pd.DataFrame, 
+                                                  y_test: pd.Series, 
+                                                  RR_values: np.ndarray, 
+                                                  models:dict[float, CatBoostClassifier], 
+                                                  model_weights:  dict[float, float]
+                                                  ) -> tuple[float,float,int]:
             result_on_test = 0
             succeeded_trades = 0
             total_trades = 0
@@ -503,14 +539,20 @@ class Timeframe_Class:
                     best_rr : float = RR_values[best_rr_idx]
                     if all(probs[i] >= TARGET_PROB for i in range(best_rr_idx + 1)):
                         if y_test.iloc[i].item() >= best_rr:
-                            result_on_test += Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_values[best_rr_idx]]),
-                                                                                        Estimated_trade_nums_Daily= Max_No_Trade_Daily,
-                                                                                        Trade_RR= best_rr) * best_rr
-                            succeeded_trades += 1
+                            try:
+                                result_on_test += Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_values[best_rr_idx]]),
+                                                                                            Estimated_trade_nums_Daily= Max_No_Trade_Daily,
+                                                                                            Trade_RR= best_rr) * best_rr
+                                succeeded_trades += 1
+                            except Exception as e:
+                                print_and_logging_Function("error",f"{self.timeframe} -> Error in Backtesting the ML model on Test Dataset: {e}")
                         else:
-                            result_on_test -= Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_values[best_rr_idx]]),
-                                                                                        Estimated_trade_nums_Daily= Max_No_Trade_Daily,
-                                                                                        Trade_RR= best_rr)
+                            try:
+                                result_on_test -= Position_Manager_Class.Risk_Calculator_Function(Estimated_Trade_win_Prob= min(1,probs[best_rr_idx]*model_weights[RR_values[best_rr_idx]]),
+                                                                                            Estimated_trade_nums_Daily= Max_No_Trade_Daily,
+                                                                                            Trade_RR= best_rr)
+                            except Exception as e:
+                                print_and_logging_Function("error",f"{self.timeframe} -> Error in Backtesting the ML model on Test Dataset: {e}")
                         total_trades += 1
             if total_trades > 0:
                 winrate = succeeded_trades / total_trades
@@ -518,28 +560,8 @@ class Timeframe_Class:
             else:
                 winrate = 0
                 
-            if winrate <= (TARGET_PROB**2) and result_on_test <= 0 : 
-                self.RANDOM_STATE = random.randint(10, 50)
-                print_and_logging_Function("warning", f"{self.timeframe} -> Based on current data Bot is not profitable", "title")
-                return {float("nan"): CatBoostClassifier()} , {}
-                
-            # Save updated models and weights if needed
-            model_score = Position_Manager_Class.model_score_Function(winrate= winrate, pnl_percent= result_on_test*100, num_trades= total_trades)
-            
-            if model_score > prev_model_score:
-                with open(model_cache_path, "wb") as f:
-                    pickle.dump((models, model_weights, model_score), f)
-                
-                print_and_logging_Function("info", f"{self.timeframe} -> model is updated. new score -> {model_score} prev score -> {prev_model_score}")
-                return models, model_weights                
-            else:
-                print_and_logging_Function("info", f"{self.timeframe} ->  model did not updated. new score -> {model_score} prev score -> {prev_model_score}. Previous model will be used!")
-                return prev_models, prev_model_weights
-                    
-        except Exception as e:
-            print_and_logging_Function("error", f"{self.timeframe} -> An error occured in Backtesting the ML on Test Dataset:{e}", "title")
-            return {float("nan"): CatBoostClassifier()} , {}
-    
+            return winrate, result_on_test, total_trades
+        
     async def Update_Positions_Function(self):
         """
         This asynchronous function is responsible for updating trading positions by opening new positions 
