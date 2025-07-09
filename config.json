@@ -17,7 +17,8 @@
         },
         "ML_Engine":{
             "Retrain_Every" : 10,
-            "Min_Test_Dataset_size": 100
+            "Min_Test_Dataset_size": 100,
+            "Train_Test_Split": 0.2
         }
     },
     "runtime":{

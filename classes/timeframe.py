@@ -31,6 +31,7 @@ TARGET_PROB: float = config["trading_configs"]["risk_management"]["MIN_Prob"]
 Max_No_Trade_Daily: int = config["trading_configs"]["risk_management"]["Max_No_Trade_Daily"]
 RETRAIN_EVERY: int = config["trading_configs"]["ML_Engine"]["Retrain_Every"]
 MIN_Test_Dataset_size: int = config["trading_configs"]["ML_Engine"]["Min_Test_Dataset_size"]
+TEST_TRAIN_SPLIT : float = config["trading_configs"]["ML_Engine"]["Train_Test_Split"]
 
 class Timeframe_Class:
     """
@@ -394,7 +395,7 @@ class Timeframe_Class:
             self.retrain_counters[DP_type] = 0  # Reset counter
             
             # Start new modeling
-            X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size=0.2, random_state = self.RANDOM_STATE)
+            X_train, X_test, y_train, y_test = train_test_split(Input, Output, test_size= TEST_TRAIN_SPLIT, random_state = self.RANDOM_STATE)
             X_train = pd.DataFrame(X_train)
             X_test = pd.DataFrame(X_test)
             y_train = pd.Series(y_train).reset_index(drop=True)
@@ -492,7 +493,7 @@ class Timeframe_Class:
                 return {float("nan"): CatBoostClassifier()} , {}
                 
             # Save updated models and weights if needed
-            model_score = Position_Manager_Class.model_score_Function(winrate= winrate, pnl_percent= result_on_test*100, num_trades= total_trades)
+            model_score = Position_Manager_Class.model_score_Function(winrate= winrate, pnl_percent= (result_on_test*100) / TEST_TRAIN_SPLIT , num_trades= int(total_trades / TEST_TRAIN_SPLIT) )
             
             if model_score > prev_model_score:
                 with open(model_cache_path, "wb") as f:

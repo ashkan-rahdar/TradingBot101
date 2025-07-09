@@ -133,5 +133,5 @@ class Position_Manager_Class:
         pnl_per_trade = pnl_percent / num_trades
         confidence_penalty = 1 - math.exp(-num_trades / num_trades_weight)
 
-        score = (winrate * winrate_weight) + ((pnl_per_trade / (DD_Daily/Max_No_Trade_Daily) )* PNL_weight) * confidence_penalty
+        score = (winrate * winrate_weight) + (pnl_per_trade * PNL_weight) * confidence_penalty
         return score
