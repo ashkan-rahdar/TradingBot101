@@ -80,9 +80,9 @@ class Position_Manager_Class:
 
         # Check inputs
         if Estimated_trade_nums_Daily < 1:
-            return 0.0
-        if Estimated_Trade_win_Prob <= TARGET_PROB or Estimated_Trade_win_Prob >= 1.0:
-            return 0.0
+            raise Exception(f"Error in Risk Calculator: Estimated trade numbers Daily is invalid: {Estimated_trade_nums_Daily}")
+        if Estimated_Trade_win_Prob < TARGET_PROB or Estimated_Trade_win_Prob > 1.0:
+            raise Exception(f"Error in Risk Calculator: Estimated Prob is not valid: {Estimated_Trade_win_Prob}")
 
         # Convert confidence level to alpha (probability of hitting or exceeding the streak)
         alpha = 1.0 - Confidence_Coefficient
