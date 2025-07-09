@@ -11,6 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from functions.logger import print_and_logging_Function
 import parameters
+from functions.utilities import is_trading_hours_now
 
 # Load JSON config file
 with open("./config.json", "r") as file:
@@ -491,7 +492,7 @@ class Metatrader_Module_Class:
             if len(The_Dataset) != 0:
                     print_and_logging_Function("info", f"Waiting for new {The_timeframe} candles...", "description")
 
-            while not parameters.shutdown_flag:
+            while is_trading_hours_now() and (not parameters.shutdown_flag):
                 DataSet = pd.DataFrame(self.mt.copy_rates_from_pos(config["trading_configs"]["asset"],  # type: ignore
                                                             selected_timeframe, 
                                                             0, 
