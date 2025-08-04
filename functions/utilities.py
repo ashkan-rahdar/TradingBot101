@@ -2,6 +2,7 @@ from datetime import datetime, time, timezone
 import os
 import sys
 import time as Time_module
+import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import parameters
@@ -27,3 +28,6 @@ def TelegramBot_loop_Funciton():
         except Exception as e:
             print_and_logging_Function('error', f'Error in Telegram Bot: {e}')
         Time_module.sleep(10)
+        
+def is_valid_Dataset_Function(DataSet: pd.DataFrame):
+    return all(item in DataSet.columns for item in ['time','high','low']) and DataSet.__len__() > 100
