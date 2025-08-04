@@ -18,7 +18,7 @@ from functions.logger import print_and_logging_Function  # noqa: E402
 from functions.run_with_retries import run_with_retries_Function  # noqa: E402
 from classes.timeframe import CTimeFrames  # noqa: E402
 from classes.Metatrader_Module import CMetatrader_Module  # noqa: E402
-from functions.utilities import is_trading_hours_now, TelegramBot_loop_Funciton  # noqa: E402
+from functions.utilities import is_trading_hours_now, TelegramBot_loop_Funciton, is_valid_Dataset_Function  # noqa: E402
 from classes.Telegrambot import CTelegramBot  # noqa: E402
 import parameters  # noqa: E402
 
@@ -146,16 +146,22 @@ async def Each_TimeFrame_Function(The_index: int, The_timeframe: str):
                 return
             
             try:
-                The_Collected_DataSet = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
+                The_Collected_DataSet : pd.DataFrame = await run_with_retries_Function(CMetatrader_Module.main_fetching_data_Function,The_timeframe, CTimeFrames[The_index].DataSet)
             except RuntimeError as The_error:
                 print_and_logging_Function("critical", f"Critical failure in fetching {The_timeframe} data: {The_error}", "title")
                 parameters.shutdown_flag = True
                 The_Collected_DataSet = pd.DataFrame()
             
+            if not is_valid_Dataset_Function(The_Collected_DataSet):
+                await asyncio.sleep(60)
+                continue
+            
             if parameters.shutdown_flag:
                 return
             
-            CTimeFrames[The_index].set_data_Function(The_Collected_DataSet)
+            if not CTimeFrames[The_index].set_data_Function(The_Collected_DataSet):
+                await asyncio.sleep(60)
+                continue
 
             # Step 2: Detect Flags
             try:
