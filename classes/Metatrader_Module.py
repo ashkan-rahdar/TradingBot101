@@ -143,6 +143,22 @@ class Metatrader_Module_Class:
         except Exception as e:
             print_and_logging_Function("error",f"An error happened in Metatrader: {e} \n possible reasons: \n 1- Network connection \n 2- Account expiration or login")
 
+    @staticmethod
+    def comission_offset_calculator_Function(symbol_info: object, vol: float) -> float:
+        tick_size = symbol_info.trade_tick_size # type: ignore
+        tick_value = symbol_info.trade_tick_value   # type: ignore
+        commission_per_lot: float = config["account_info"]["commision"]
+        commission = vol * commission_per_lot
+        return (commission / tick_value) * tick_size
+    
+    @staticmethod
+    def max_vol_Calculator_Function(symbol_info: object, max_price_range: float) -> float:
+        tick_size = symbol_info.trade_tick_size # type: ignore
+        tick_value = symbol_info.trade_tick_value   # type: ignore
+        commission_per_lot:  float = config["account_info"]["commision"]
+        max_vol = (max_price_range / tick_size ) * tick_value / commission_per_lot
+        return max_vol
+    
     def Open_position_Function(self, 
                             order_type: typing.Literal["Buy", "Sell", "Buy Limit", "Sell Limit"], 
                             vol: float, 
@@ -196,22 +212,28 @@ class Metatrader_Module_Class:
                 return None
 
             digits = symbol_info.digits
-            tick_size = symbol_info.trade_tick_size
-            tick_value = symbol_info.trade_tick_value
-            commission_per_lot = config["account_info"]["commision"]
-            commission = vol * commission_per_lot
-            commission_price_offset = (commission / tick_value) * tick_size
+            commission_price_offset = self.comission_offset_calculator_Function(symbol_info,vol)
+            max_vol = self.max_vol_Calculator_Function(symbol_info, abs((sl - price)/2))
 
-            if order_type in ["Buy", "Buy Limit"]:
-                sl_adjusted = sl - commission_price_offset
-            elif order_type in ["Sell", "Sell Limit"]:
-                sl_adjusted = sl + commission_price_offset
-            else:
-                sl_adjusted = sl
+            if vol >= max_vol:
+                vol = max_vol
+                if order_type in ["Buy", "Buy Limit"]:
+                    sl_adjusted = sl - abs((sl - price)/2)
+                elif order_type in ["Sell", "Sell Limit"]:
+                    sl_adjusted = sl + abs((sl - price)/2)
+                else:
+                    sl_adjusted = sl
+            else:    
+                if order_type in ["Buy", "Buy Limit"]:
+                    sl_adjusted = sl - commission_price_offset
+                elif order_type in ["Sell", "Sell Limit"]:
+                    sl_adjusted = sl + commission_price_offset
+                else:
+                    sl_adjusted = sl
 
-            if abs(sl_adjusted - sl) > abs(sl - price):
-                print_and_logging_Function("warning",f"Large commesion for this position is dangerous, Basic SL will be considered for preventing high risk: \n SL based on commesion:{sl_adjusted}, Basic SL: {sl}", "title")
-                sl_adjusted = sl
+                if abs(sl_adjusted - sl) > abs(sl - price):
+                    print_and_logging_Function("warning",f"Large commesion for this position is dangerous, Basic SL will be considered for preventing high risk: \n SL based on commesion:{sl_adjusted}, Basic SL: {sl}", "title")
+                    sl_adjusted = sl
                 
             # Determine pip size based on digits
             min_sl_distance = 10 * (10 ** -digits)
@@ -380,7 +402,7 @@ class Metatrader_Module_Class:
 
             result = self.mt.order_send(request) # type: ignore
 
-            if result.retcode != self.mt.TRADE_RETCODE_DONE:
+            if result.retcode != self.mt.TRADE_RETCODE_DONE and result.retcode != self.mt.TRADE_RETCODE_NO_CHANGES:
                 raise Exception(f"Failed to modify order {order_id}: Retcode={result.retcode}")
 
             print_and_logging_Function("info", f"Successfully modified order {order_id}: TP={tp}, Vol={vol}", "title")
