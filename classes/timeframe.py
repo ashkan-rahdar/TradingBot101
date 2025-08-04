@@ -124,8 +124,11 @@ class Timeframe_Class:
         self.detector = FlagDetector_Class(The_timeframe, self.CMySQL_DataBase)
         self.RANDOM_STATE = 42
     
-    def set_data_Function(self, aDataSet: pd.DataFrame):
+    def set_data_Function(self, aDataSet: pd.DataFrame) -> bool:
+        if self.DataSet.equals(aDataSet):
+            return False
         self.DataSet = aDataSet
+        return True
 
     async def detect_flags_Function(self):
         """
