@@ -109,14 +109,17 @@ class Position_Manager_Class:
         Losing_streak_risk = Daily_Max_Drawdown / losing_streak_length
 
         # Kelly fraction calculation
-        p = Estimated_Trade_win_Prob
-        q = 1.0 - p
-        mu = p * Trade_RR - q * 1.0
-        sigma2 = p * (Trade_RR - mu) ** 2 + q * (-1.0 - mu) ** 2
-        if sigma2 == 0.0:
-            kelly_fraction = 0.0
+        if Estimated_Trade_win_Prob < Confidence_Coefficient:
+            p = Estimated_Trade_win_Prob
+            q = 1.0 - p
+            mu = p * Trade_RR - q * 1.0
+            sigma2 = p * (Trade_RR - mu) ** 2 + q * (-1.0 - mu) ** 2
+            if sigma2 == 0.0:
+                kelly_fraction = 0.0
+            else:
+                kelly_fraction = mu / sigma2
         else:
-            kelly_fraction = mu / sigma2
+            kelly_fraction = 1
 
         # Scale Kelly fraction to prevent over-risking
         kelly_fraction_risk = max(0.0, min(Kelly_Scale * kelly_fraction, Max_Kelly_Risk))
