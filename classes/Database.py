@@ -144,35 +144,64 @@ class Database_Class:
             """
         ]
 
-        # Triggers must be separate because they use BEGIN..END
-        trigger_queries = [
-            f"""
-            CREATE TRIGGER trg_update_position_result
-            AFTER UPDATE ON {self.important_dps_table_name}
-            FOR EACH ROW
-            BEGIN
-                IF NEW.Result <> OLD.Result THEN
-                    UPDATE {self.Positions_table_name}
-                    SET Result = NEW.Result * ABS(Price - SL)
-                    WHERE Traded_DP = NEW.id AND Result <> NEW.Result;
-                END IF;
-            END
+        Result_update_trigger_query = f"""
+                CREATE TRIGGER trg_update_position_result_{self.TimeFrame}
+                AFTER UPDATE ON {self.important_dps_table_name}
+                FOR EACH ROW
+                BEGIN
+                    IF NEW.Result <> OLD.Result OR NEW.weight <> OLD.weight THEN
+                        UPDATE {self.Positions_table_name}
+                        SET Result = 
+                            CASE
+                                WHEN NEW.weight = 0 THEN
+                                    CASE
+                                        WHEN ROUND(NEW.Result * ABS(Price - SL), 5) <= ROUND(ABS(TP - Price), 5)
+                                            THEN -ABS(Price - SL)
+                                        ELSE ROUND(ABS(TP - Price), 5)
+                                    END
+                                ELSE
+                                    CASE
+                                        WHEN ROUND(NEW.Result * ABS(Price - SL), 5) > ROUND(ABS(TP - Price), 5)
+                                            THEN ROUND(ABS(TP - Price), 5)
+                                        ELSE ROUND(NEW.Result * ABS(Price - SL), 5)
+                                    END
+                            END
+                        WHERE Traded_DP = NEW.id;
+                    END IF;
+                END;
             """
-        ]
+        ensuring_right_Result_query = f"""
+            UPDATE {self.Positions_table_name} AS p
+            JOIN {self.important_dps_table_name} AS d ON p.Traded_DP = d.id
+            SET p.Result = 
+                CASE
+                    WHEN d.weight = 0 THEN
+                        CASE
+                            WHEN ROUND(d.Result * ABS(p.Price - p.SL), 5) <= ROUND(ABS(p.TP - p.Price), 5) 
+                                THEN -ABS(p.Price - p.SL)
+                            ELSE ROUND(ABS(p.TP - p.Price), 5)
+                        END
+                    ELSE
+                        CASE
+                            WHEN ROUND(d.Result * ABS(p.Price - p.SL), 5) > ROUND(ABS(p.TP - p.Price), 5)
+                                THEN ROUND(ABS(p.TP - p.Price), 5)
+                            ELSE ROUND(d.Result * ABS(p.Price - p.SL), 5)
+                        END
+                END;
 
+            """    
         try:
             with self.connection_pool.get_connection() as conn:
                 cursor = conn.cursor()
                 for query in queries:
                     cursor.execute(query)
 
-                # MySQL requires each trigger to be created individually
-                for trigger in trigger_queries:
-                    try:
-                        cursor.execute(f"DROP TRIGGER IF EXISTS {trigger.split()[2]}")
-                        cursor.execute(trigger)
-                    except Exception as e:
-                        print_and_logging_Function("warning", f"{self.TimeFrame} -> Trigger creation failed: {e}", "title")
+                try:
+                    cursor.execute(f"DROP TRIGGER IF EXISTS {Result_update_trigger_query.split()[2]}")
+                    cursor.execute(Result_update_trigger_query)
+                    cursor.execute(ensuring_right_Result_query)
+                except Exception as e:
+                    print_and_logging_Function("warning", f"{self.TimeFrame} -> Trigger creation failed: {e}", "title")
 
                 conn.commit()
                 print_and_logging_Function("info", f"{self.TimeFrame} -> Tables and triggers created successfully!", "title")
@@ -807,53 +836,27 @@ class Database_Class:
                 await conn.commit()
                 async with conn.cursor() as cursor:
 
-                    # Step 1: Read all necessary fields from Positions table
-                    await cursor.execute(f"""
-                        SELECT id, Traded_DP, Price, TP, SL, Result
-                        FROM {self.Positions_table_name}
-                    """)
-                    positions = await cursor.fetchall()
-                    if not positions:
-                        return
+                    ensuring_right_Result_query = f"""
+                        UPDATE {self.Positions_table_name} AS p
+                        JOIN {self.important_dps_table_name} AS d ON p.Traded_DP = d.id
+                        SET p.Result = 
+                            CASE
+                                WHEN d.weight = 0 THEN
+                                    CASE
+                                        WHEN ROUND(d.Result * ABS(p.Price - p.SL), 5) <= ROUND(ABS(p.TP - p.Price), 5) 
+                                            THEN -ABS(p.Price - p.SL)
+                                        ELSE ROUND(ABS(p.TP - p.Price), 5)
+                                    END
+                                ELSE
+                                    CASE
+                                        WHEN ROUND(d.Result * ABS(p.Price - p.SL), 5) > ROUND(ABS(p.TP - p.Price), 5)
+                                            THEN ROUND(ABS(p.TP - p.Price), 5)
+                                        ELSE ROUND(d.Result * ABS(p.Price - p.SL), 5)
+                                    END
+                            END;
 
-                    # Step 2: Build a list of Traded_DP ids to query their weights
-                    traded_dp_ids = list(set(row[1] for row in positions if row[1]))
-                    await cursor.execute(f"""
-                        SELECT id, weight
-                        FROM {self.important_dps_table_name}
-                        WHERE id IN ({','.join(['%s'] * len(traded_dp_ids))})
-                    """, traded_dp_ids)
-                    dp_weights_raw = await cursor.fetchall()
-                    dp_weights = {row[0]: row[1] for row in dp_weights_raw}
-
-                    # Step 3: Prepare update list
-                    updates = []
-                    for pos in positions:
-                        pos_id, traded_dp, price, tp, sl, result = pos
-                        
-                        if result == 0:
-                            continue  # Skip positions without a result yet
-
-                        hit_tp = abs(tp - price)
-                        hit_sl = abs(sl - price)
-
-                        if result >= hit_tp:
-                            corrected_result = hit_tp
-                        elif dp_weights.get(traded_dp, 0) == 0:
-                            corrected_result = -hit_sl
-                        else:
-                            continue  # The trade hasn't hit TP or SL, leave result unchanged
-
-                        if corrected_result != result:
-                            updates.append((corrected_result, pos_id))
-
-                    # Step 4: Batch update the corrected Results
-                    for new_result, pos_id in updates:
-                        await cursor.execute(f"""
-                            UPDATE {self.Positions_table_name}
-                            SET Result = %s
-                            WHERE id = %s
-                        """, (new_result, pos_id))
+                    """
+                    await cursor.execute(ensuring_right_Result_query)
 
                     await conn.commit()
 
